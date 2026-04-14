@@ -1,0 +1,628 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Ocean Depths — reveal.js lecture theme
+   Deep Navy · Teal · Seafoam · Cream
+   Designed for projection · 45-min university lecture
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Custom Properties ───────────────────────────────────────── */
+
+:root {
+  /* Core palette */
+  --ocean-abyss:    #0b1018;
+  --ocean-deep:     #1a2332;
+  --ocean-mid:      #223044;
+  --ocean-teal:     #2d8b8b;
+  --ocean-teal-glow:#2d8b8b55;
+  --ocean-seafoam:  #a8dadc;
+  --ocean-cream:    #f1faee;
+  --ocean-mist:     #8faab0;
+
+  /* Syntax highlighting */
+  --syn-keyword:    #5ec4c4;
+  --syn-string:     #8bdadb;
+  --syn-number:     #e0b060;
+  --syn-comment:    #4a6a72;
+  --syn-function:   #6ec6c6;
+  --syn-operator:   #e09060;
+
+  /* Sizing */
+  --slide-font-size:    1.15em;
+  --heading-font-size:  2.4em;
+  --h2-font-size:       1.7em;
+  --h3-font-size:       1.3em;
+
+  /* Timing */
+  --transition-speed:   0.35s;
+}
+
+/* ── Reveal.js Base Overrides ────────────────────────────────────── */
+
+.reveal {
+  font-family: "Source Sans 3", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  font-size: var(--slide-font-size);
+  font-weight: 400;
+  color: var(--ocean-cream);
+  background-color: var(--ocean-deep);
+  text-shadow: none;
+}
+
+/* Subtle radial vignette on every slide for depth */
+.reveal .slide-background {
+  background:
+    radial-gradient(
+      ellipse 80% 70% at 50% 45%,
+      var(--ocean-mid) 0%,
+      var(--ocean-deep) 60%,
+      var(--ocean-abyss) 100%
+    ) !important;
+}
+
+/* ── Typography ──────────────────────────────────────────────────── */
+
+.reveal h1 {
+  font-size: var(--heading-font-size);
+  font-weight: 700;
+  color: var(--ocean-seafoam);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.5em;
+  text-transform: none;
+}
+
+.reveal h2 {
+  font-size: var(--h2-font-size);
+  font-weight: 700;
+  color: var(--ocean-teal);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin-bottom: 0.45em;
+  text-transform: none;
+}
+
+.reveal h3 {
+  font-size: var(--h3-font-size);
+  font-weight: 600;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.35em;
+  text-transform: none;
+}
+
+.reveal p,
+.reveal li {
+  line-height: 1.7;
+  color: var(--ocean-cream);
+}
+
+.reveal strong {
+  color: var(--ocean-seafoam);
+  font-weight: 700;
+}
+
+.reveal em {
+  color: var(--ocean-mist);
+  font-style: italic;
+}
+
+/* ── Links ───────────────────────────────────────────────────────── */
+
+.reveal a {
+  color: var(--ocean-seafoam);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ocean-teal-glow);
+  transition: border-color var(--transition-speed), color var(--transition-speed);
+}
+
+.reveal a:hover {
+  color: var(--ocean-teal);
+  border-bottom-color: var(--ocean-teal);
+}
+
+/* ── Lists ───────────────────────────────────────────────────────── */
+
+.reveal ul,
+.reveal ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+
+.reveal ul li::marker {
+  color: var(--ocean-teal);
+}
+
+.reveal ol li::marker {
+  color: var(--ocean-teal);
+  font-weight: 600;
+}
+
+/* ── Code Blocks ─────────────────────────────────────────────────── */
+
+.reveal pre {
+  background: var(--ocean-abyss);
+  border: 1px solid var(--ocean-mid);
+  border-left: 3px solid var(--ocean-teal);
+  border-radius: 6px;
+  padding: 0.9em 1.1em;
+  margin: 0.7em 0;
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  width: 100%;
+  font-size: 0.72em;
+  line-height: 1.6;
+}
+
+.reveal code {
+  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", monospace;
+  background: var(--ocean-abyss);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--ocean-seafoam);
+}
+
+.reveal pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+  color: var(--ocean-cream);
+}
+
+/* Monokai-inspired syntax tokens (reveal.js highlight.js) */
+.reveal .hljs-keyword,
+.reveal .hljs-selector-tag,
+.reveal .hljs-built_in {
+  color: var(--syn-keyword);
+  font-weight: 600;
+}
+
+.reveal .hljs-string,
+.reveal .hljs-attr,
+.reveal .hljs-template-variable {
+  color: var(--syn-string);
+}
+
+.reveal .hljs-number,
+.reveal .hljs-literal {
+  color: var(--syn-number);
+}
+
+.reveal .hljs-comment,
+.reveal .hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.reveal .hljs-title,
+.reveal .hljs-title\.function_,
+.reveal .hljs-section {
+  color: var(--syn-function);
+}
+
+.reveal .hljs-operator,
+.reveal .hljs-tag {
+  color: var(--syn-operator);
+}
+
+.reveal .hljs-type,
+.reveal .hljs-class .hljs-title {
+  color: #d4a0e0;
+}
+
+.reveal .hljs-params {
+  color: var(--ocean-mist);
+}
+
+/* ── KaTeX / Math ────────────────────────────────────────────────── */
+
+.reveal .katex {
+  color: var(--ocean-seafoam);
+  font-size: 1.1em;
+}
+
+.reveal .katex-display {
+  margin: 0.6em 0;
+  color: var(--ocean-seafoam);
+}
+
+.reveal .katex-display > .katex {
+  color: var(--ocean-seafoam);
+}
+
+/* ── Blockquotes / Callout Boxes ──────────────────────────────────── */
+
+.reveal blockquote {
+  background: linear-gradient(135deg, var(--ocean-mid), var(--ocean-deep));
+  border-left: 4px solid var(--ocean-teal);
+  border-radius: 0 8px 8px 0;
+  padding: 0.8em 1.2em;
+  margin: 0.6em 0;
+  font-style: normal;
+  color: var(--ocean-cream);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.reveal blockquote p {
+  margin: 0;
+}
+
+.reveal blockquote strong {
+  color: var(--ocean-teal);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────── */
+
+.reveal table {
+  margin: 0.6em auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82em;
+  width: auto;
+}
+
+.reveal thead {
+  background: var(--ocean-mid);
+}
+
+.reveal th {
+  color: var(--ocean-seafoam);
+  font-weight: 700;
+  padding: 0.55em 1em;
+  border-bottom: 2px solid var(--ocean-teal);
+  text-align: left;
+}
+
+.reveal td {
+  padding: 0.45em 1em;
+  border-bottom: 1px solid var(--ocean-mid);
+  color: var(--ocean-cream);
+}
+
+.reveal tbody tr:nth-child(even) {
+  background: rgba(26, 35, 50, 0.5);
+}
+
+.reveal tbody tr:hover {
+  background: var(--ocean-mid);
+}
+
+/* ── Horizontal Rule ─────────────────────────────────────────────── */
+
+.reveal hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ocean-teal) 30%,
+    var(--ocean-seafoam) 50%,
+    var(--ocean-teal) 70%,
+    transparent 100%
+  );
+  margin: 1em 0;
+}
+
+/* ── Images ──────────────────────────────────────────────────────── */
+
+.reveal section img {
+  border: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  max-height: 65vh;
+  background: transparent;
+}
+
+.reveal section img.plain {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* ── Progress Bar ────────────────────────────────────────────────── */
+
+.reveal .progress {
+  height: 4px;
+  background: var(--ocean-mid);
+}
+
+.reveal .progress span {
+  background: var(--ocean-teal);
+}
+
+/* ── Controls ────────────────────────────────────────────────────── */
+
+.reveal .controls button {
+  color: var(--ocean-seafoam);
+}
+
+.reveal .controls button:hover {
+  color: var(--ocean-teal);
+}
+
+/* ── Speaker Notes ───────────────────────────────────────────────── */
+
+.reveal .speaker-notes {
+  background: var(--ocean-deep);
+  color: var(--ocean-cream);
+  font-family: "Source Sans 3", "Noto Sans SC", sans-serif;
+  font-size: 1em;
+  line-height: 1.65;
+  padding: 1.5em;
+}
+
+/* ── Fragment Animations ─────────────────────────────────────────── */
+
+.reveal .slides section .fragment {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: all var(--transition-speed) ease-out;
+}
+
+.reveal .slides section .fragment.visible,
+.reveal .slides section .fragment.current-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal .slides section .fragment.fade-up {
+  transform: translateY(24px);
+}
+
+.reveal .slides section .fragment.fade-up.visible {
+  transform: translateY(0);
+}
+
+.reveal .slides section .fragment.highlight-current-visible.visible {
+  color: var(--ocean-seafoam);
+  background: transparent;
+}
+
+/* ── Slide Number ────────────────────────────────────────────────── */
+
+.reveal .slide-number {
+  color: var(--ocean-mist);
+  background: rgba(26, 35, 50, 0.7);
+  font-size: 0.6em;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Custom Utility Classes
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Accent highlight — teal inline highlight */
+.accent {
+  color: var(--ocean-teal);
+  font-weight: 600;
+}
+
+/* Dimmed / muted text */
+.dim {
+  color: var(--ocean-mist);
+  opacity: 0.75;
+}
+
+/* Smaller code block */
+.code-small pre,
+.code-small code {
+  font-size: 0.58em !important;
+  line-height: 1.45;
+}
+
+/* Two-column flexbox layout */
+.two-column {
+  display: flex;
+  gap: 1.8em;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.two-column > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.two-column > .col-wide {
+  flex: 1.6;
+}
+
+.two-column > .col-narrow {
+  flex: 0.7;
+}
+
+/* Centered image */
+.img-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.5em 0;
+}
+
+.img-center img {
+  max-width: 96%;
+  max-height: 62vh;
+}
+
+/* Full-bleed image (edge to edge) */
+.img-full {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+.img-full img {
+  max-width: 100%;
+  max-height: 78vh;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Callout box — teal accent */
+.callout {
+  background: linear-gradient(135deg, rgba(45, 139, 139, 0.12), rgba(45, 139, 139, 0.04));
+  border: 1px solid var(--ocean-teal-glow);
+  border-left: 4px solid var(--ocean-teal);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7em 1.1em;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+
+.callout .callout-title {
+  color: var(--ocean-teal);
+  font-weight: 700;
+  margin-bottom: 0.25em;
+}
+
+/* Warning box — warm accent */
+.callout-warning {
+  background: linear-gradient(135deg, rgba(224, 144, 96, 0.12), rgba(224, 144, 96, 0.04));
+  border: 1px solid rgba(224, 144, 96, 0.3);
+  border-left: 4px solid var(--syn-operator);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7em 1.1em;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+
+/* SVG diagram container */
+.diagram {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.5em 0;
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+/* Tag / badge */
+.tag {
+  display: inline-block;
+  background: var(--ocean-teal-glow);
+  color: var(--ocean-seafoam);
+  padding: 0.2em 0.7em;
+  border-radius: 20px;
+  font-size: 0.78em;
+  font-weight: 600;
+  margin: 0.15em;
+}
+
+/* Inline math environment helper */
+.math-block {
+  text-align: center;
+  margin: 0.8em 0;
+  font-size: 1.15em;
+}
+
+/* ── Title Slide ─────────────────────────────────────────────────── */
+
+.reveal .slides > section.title-slide {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 100%;
+}
+
+.reveal .slides > section.title-slide h1 {
+  font-size: 2.8em;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.15em;
+  text-shadow: 0 0 40px var(--ocean-teal-glow);
+}
+
+.reveal .slides > section.title-slide .subtitle {
+  font-size: 1.35em;
+  color: var(--ocean-mist);
+  margin-bottom: 0.8em;
+  font-weight: 400;
+}
+
+.reveal .slides > section.title-slide .authors {
+  font-size: 0.95em;
+  color: var(--ocean-teal);
+  margin-bottom: 0.3em;
+}
+
+.reveal .slides > section.title-slide .date {
+  font-size: 0.82em;
+  color: var(--ocean-mist);
+  opacity: 0.7;
+}
+
+/* ── Section Divider Slides ──────────────────────────────────────── */
+
+.reveal .slides > section.section-slide {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.reveal .slides > section.section-slide h2 {
+  font-size: 2.1em;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.3em;
+}
+
+.reveal .slides > section.section-slide .section-number {
+  font-size: 3.5em;
+  font-weight: 800;
+  color: var(--ocean-teal);
+  opacity: 0.25;
+  line-height: 1;
+  margin-bottom: 0.15em;
+}
+
+/* ── Part-specific color accents (via data attributes) ───────────── */
+
+/* Usage: <section data-part="1"> */
+.reveal .slides section[data-part="1"] h2 {
+  color: var(--ocean-teal);
+}
+
+.reveal .slides section[data-part="2"] h2 {
+  color: #5ec4c4;
+}
+
+.reveal .slides section[data-part="3"] h2 {
+  color: var(--ocean-seafoam);
+}
+
+/* ── Print / PDF overrides ───────────────────────────────────────── */
+
+@media print {
+  .reveal {
+    background: var(--ocean-deep) !important;
+    color: var(--ocean-cream) !important;
+  }
+  .reveal .slide-background {
+    background: var(--ocean-deep) !important;
+  }
+}
+
+/* ── Responsive fine-tuning ──────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  html:not(.receiver-mode) {
+    --heading-font-size: 1.9em;
+    --h2-font-size:      1.4em;
+    --slide-font-size:   1em;
+  }
+
+  html:not(.receiver-mode) .two-column {
+    flex-direction: column;
+    gap: 1em;
+  }
+}

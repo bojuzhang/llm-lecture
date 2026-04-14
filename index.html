@@ -1,0 +1,2628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大模型推理 &amp; Inference-Time Scaling</title>
+
+  <!-- Reveal.js Core CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
+
+  <!-- KaTeX CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+  <!-- Embedded Theme -->
+  <style>
+/* ═══════════════════════════════════════════════════════════════════
+   Ocean Depths — reveal.js lecture theme
+   Deep Navy · Teal · Seafoam · Cream
+   Designed for projection · 45-min university lecture
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Custom Properties ───────────────────────────────────────── */
+
+:root {
+  /* Core palette */
+  --ocean-abyss:    #0b1018;
+  --ocean-deep:     #1a2332;
+  --ocean-mid:      #223044;
+  --ocean-teal:     #2d8b8b;
+  --ocean-teal-glow:#2d8b8b55;
+  --ocean-seafoam:  #a8dadc;
+  --ocean-cream:    #f1faee;
+  --ocean-mist:     #8faab0;
+
+  /* Syntax highlighting */
+  --syn-keyword:    #5ec4c4;
+  --syn-string:     #8bdadb;
+  --syn-number:     #e0b060;
+  --syn-comment:    #4a6a72;
+  --syn-function:   #6ec6c6;
+  --syn-operator:   #e09060;
+
+  /* Sizing */
+  --slide-font-size:    1.15em;
+  --heading-font-size:  2.4em;
+  --h2-font-size:       1.7em;
+  --h3-font-size:       1.3em;
+
+  /* Timing */
+  --transition-speed:   0.35s;
+}
+
+/* ── Reveal.js Base Overrides ────────────────────────────────────── */
+
+.reveal {
+  font-family: "Source Sans 3", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  font-size: var(--slide-font-size);
+  font-weight: 400;
+  color: var(--ocean-cream);
+  background-color: var(--ocean-deep);
+  text-shadow: none;
+}
+
+/* Subtle radial vignette on every slide for depth */
+.reveal .slide-background {
+  background:
+    radial-gradient(
+      ellipse 80% 70% at 50% 45%,
+      var(--ocean-mid) 0%,
+      var(--ocean-deep) 60%,
+      var(--ocean-abyss) 100%
+    ) !important;
+}
+
+/* ── Typography ──────────────────────────────────────────────────── */
+
+.reveal h1 {
+  font-size: var(--heading-font-size);
+  font-weight: 700;
+  color: var(--ocean-seafoam);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.5em;
+  text-transform: none;
+}
+
+.reveal h2 {
+  font-size: var(--h2-font-size);
+  font-weight: 700;
+  color: var(--ocean-teal);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin-bottom: 0.45em;
+  text-transform: none;
+}
+
+.reveal h3 {
+  font-size: var(--h3-font-size);
+  font-weight: 600;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.35em;
+  text-transform: none;
+}
+
+.reveal p,
+.reveal li {
+  line-height: 1.7;
+  color: var(--ocean-cream);
+}
+
+.reveal strong {
+  color: var(--ocean-seafoam);
+  font-weight: 700;
+}
+
+.reveal em {
+  color: var(--ocean-mist);
+  font-style: italic;
+}
+
+/* ── Links ───────────────────────────────────────────────────────── */
+
+.reveal a {
+  color: var(--ocean-seafoam);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ocean-teal-glow);
+  transition: border-color var(--transition-speed), color var(--transition-speed);
+}
+
+.reveal a:hover {
+  color: var(--ocean-teal);
+  border-bottom-color: var(--ocean-teal);
+}
+
+/* ── Lists ───────────────────────────────────────────────────────── */
+
+.reveal ul,
+.reveal ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+
+.reveal ul li::marker {
+  color: var(--ocean-teal);
+}
+
+.reveal ol li::marker {
+  color: var(--ocean-teal);
+  font-weight: 600;
+}
+
+/* ── Code Blocks ─────────────────────────────────────────────────── */
+
+.reveal pre {
+  background: var(--ocean-abyss);
+  border: 1px solid var(--ocean-mid);
+  border-left: 3px solid var(--ocean-teal);
+  border-radius: 6px;
+  padding: 0.9em 1.1em;
+  margin: 0.7em 0;
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  width: 100%;
+  font-size: 0.72em;
+  line-height: 1.6;
+}
+
+.reveal code {
+  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", monospace;
+  background: var(--ocean-abyss);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--ocean-seafoam);
+}
+
+.reveal pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+  color: var(--ocean-cream);
+}
+
+/* Monokai-inspired syntax tokens (reveal.js highlight.js) */
+.reveal .hljs-keyword,
+.reveal .hljs-selector-tag,
+.reveal .hljs-built_in {
+  color: var(--syn-keyword);
+  font-weight: 600;
+}
+
+.reveal .hljs-string,
+.reveal .hljs-attr,
+.reveal .hljs-template-variable {
+  color: var(--syn-string);
+}
+
+.reveal .hljs-number,
+.reveal .hljs-literal {
+  color: var(--syn-number);
+}
+
+.reveal .hljs-comment,
+.reveal .hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.reveal .hljs-title,
+.reveal .hljs-title\.function_,
+.reveal .hljs-section {
+  color: var(--syn-function);
+}
+
+.reveal .hljs-operator,
+.reveal .hljs-tag {
+  color: var(--syn-operator);
+}
+
+.reveal .hljs-type,
+.reveal .hljs-class .hljs-title {
+  color: #d4a0e0;
+}
+
+.reveal .hljs-params {
+  color: var(--ocean-mist);
+}
+
+/* ── KaTeX / Math ────────────────────────────────────────────────── */
+
+.reveal .katex {
+  color: var(--ocean-seafoam);
+  font-size: 1.1em;
+}
+
+.reveal .katex-display {
+  margin: 0.6em 0;
+  color: var(--ocean-seafoam);
+}
+
+.reveal .katex-display > .katex {
+  color: var(--ocean-seafoam);
+}
+
+/* ── Blockquotes / Callout Boxes ──────────────────────────────────── */
+
+.reveal blockquote {
+  background: linear-gradient(135deg, var(--ocean-mid), var(--ocean-deep));
+  border-left: 4px solid var(--ocean-teal);
+  border-radius: 0 8px 8px 0;
+  padding: 0.8em 1.2em;
+  margin: 0.6em 0;
+  font-style: normal;
+  color: var(--ocean-cream);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.reveal blockquote p {
+  margin: 0;
+}
+
+.reveal blockquote strong {
+  color: var(--ocean-teal);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────── */
+
+.reveal table {
+  margin: 0.6em auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82em;
+  width: auto;
+}
+
+.reveal thead {
+  background: var(--ocean-mid);
+}
+
+.reveal th {
+  color: var(--ocean-seafoam);
+  font-weight: 700;
+  padding: 0.55em 1em;
+  border-bottom: 2px solid var(--ocean-teal);
+  text-align: left;
+}
+
+.reveal td {
+  padding: 0.45em 1em;
+  border-bottom: 1px solid var(--ocean-mid);
+  color: var(--ocean-cream);
+}
+
+.reveal tbody tr:nth-child(even) {
+  background: rgba(26, 35, 50, 0.5);
+}
+
+.reveal tbody tr:hover {
+  background: var(--ocean-mid);
+}
+
+/* ── Horizontal Rule ─────────────────────────────────────────────── */
+
+.reveal hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ocean-teal) 30%,
+    var(--ocean-seafoam) 50%,
+    var(--ocean-teal) 70%,
+    transparent 100%
+  );
+  margin: 1em 0;
+}
+
+/* ── Images ──────────────────────────────────────────────────────── */
+
+.reveal section img {
+  border: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  max-height: 65vh;
+  background: transparent;
+}
+
+.reveal section img.plain {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* ── Progress Bar ────────────────────────────────────────────────── */
+
+.reveal .progress {
+  height: 4px;
+  background: var(--ocean-mid);
+}
+
+.reveal .progress span {
+  background: var(--ocean-teal);
+}
+
+/* ── Controls ────────────────────────────────────────────────────── */
+
+.reveal .controls button {
+  color: var(--ocean-seafoam);
+}
+
+.reveal .controls button:hover {
+  color: var(--ocean-teal);
+}
+
+/* ── Speaker Notes ───────────────────────────────────────────────── */
+
+.reveal .speaker-notes {
+  background: var(--ocean-deep);
+  color: var(--ocean-cream);
+  font-family: "Source Sans 3", "Noto Sans SC", sans-serif;
+  font-size: 1em;
+  line-height: 1.65;
+  padding: 1.5em;
+}
+
+/* ── Fragment Animations ─────────────────────────────────────────── */
+
+.reveal .slides section .fragment {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: all var(--transition-speed) ease-out;
+}
+
+.reveal .slides section .fragment.visible,
+.reveal .slides section .fragment.current-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal .slides section .fragment.fade-up {
+  transform: translateY(24px);
+}
+
+.reveal .slides section .fragment.fade-up.visible {
+  transform: translateY(0);
+}
+
+.reveal .slides section .fragment.highlight-current-visible.visible {
+  color: var(--ocean-seafoam);
+  background: transparent;
+}
+
+/* ── Slide Number ────────────────────────────────────────────────── */
+
+.reveal .slide-number {
+  color: var(--ocean-mist);
+  background: rgba(26, 35, 50, 0.7);
+  font-size: 0.6em;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Custom Utility Classes
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Accent highlight — teal inline highlight */
+.accent {
+  color: var(--ocean-teal);
+  font-weight: 600;
+}
+
+/* Dimmed / muted text */
+.dim {
+  color: var(--ocean-mist);
+  opacity: 0.75;
+}
+
+/* Smaller code block */
+.code-small pre,
+.code-small code {
+  font-size: 0.58em !important;
+  line-height: 1.45;
+}
+
+/* Two-column flexbox layout */
+.two-column {
+  display: flex;
+  gap: 1.8em;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.two-column > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.two-column > .col-wide {
+  flex: 1.6;
+}
+
+.two-column > .col-narrow {
+  flex: 0.7;
+}
+
+/* Centered image */
+.img-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.5em 0;
+}
+
+.img-center img {
+  max-width: 96%;
+  max-height: 62vh;
+}
+
+/* Full-bleed image (edge to edge) */
+.img-full {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+.img-full img {
+  max-width: 100%;
+  max-height: 78vh;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Callout box — teal accent */
+.callout {
+  background: linear-gradient(135deg, rgba(45, 139, 139, 0.12), rgba(45, 139, 139, 0.04));
+  border: 1px solid var(--ocean-teal-glow);
+  border-left: 4px solid var(--ocean-teal);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7em 1.1em;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+
+.callout .callout-title {
+  color: var(--ocean-teal);
+  font-weight: 700;
+  margin-bottom: 0.25em;
+}
+
+/* Warning box — warm accent */
+.callout-warning {
+  background: linear-gradient(135deg, rgba(224, 144, 96, 0.12), rgba(224, 144, 96, 0.04));
+  border: 1px solid rgba(224, 144, 96, 0.3);
+  border-left: 4px solid var(--syn-operator);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7em 1.1em;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+
+/* SVG diagram container */
+.diagram {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.5em 0;
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+/* Tag / badge */
+.tag {
+  display: inline-block;
+  background: var(--ocean-teal-glow);
+  color: var(--ocean-seafoam);
+  padding: 0.2em 0.7em;
+  border-radius: 20px;
+  font-size: 0.78em;
+  font-weight: 600;
+  margin: 0.15em;
+}
+
+/* Inline math environment helper */
+.math-block {
+  text-align: center;
+  margin: 0.8em 0;
+  font-size: 1.15em;
+}
+
+/* ── Title Slide ─────────────────────────────────────────────────── */
+
+.reveal .slides > section.title-slide {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 100%;
+}
+
+.reveal .slides > section.title-slide h1 {
+  font-size: 2.8em;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.15em;
+  text-shadow: 0 0 40px var(--ocean-teal-glow);
+}
+
+.reveal .slides > section.title-slide .subtitle {
+  font-size: 1.35em;
+  color: var(--ocean-mist);
+  margin-bottom: 0.8em;
+  font-weight: 400;
+}
+
+.reveal .slides > section.title-slide .authors {
+  font-size: 0.95em;
+  color: var(--ocean-teal);
+  margin-bottom: 0.3em;
+}
+
+.reveal .slides > section.title-slide .date {
+  font-size: 0.82em;
+  color: var(--ocean-mist);
+  opacity: 0.7;
+}
+
+/* ── Section Divider Slides ──────────────────────────────────────── */
+
+.reveal .slides > section.section-slide {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.reveal .slides > section.section-slide h2 {
+  font-size: 2.1em;
+  color: var(--ocean-seafoam);
+  margin-bottom: 0.3em;
+}
+
+.reveal .slides > section.section-slide .section-number {
+  font-size: 3.5em;
+  font-weight: 800;
+  color: var(--ocean-teal);
+  opacity: 0.25;
+  line-height: 1;
+  margin-bottom: 0.15em;
+}
+
+/* ── Part-specific color accents (via data attributes) ───────────── */
+
+/* Usage: <section data-part="1"> */
+.reveal .slides section[data-part="1"] h2 {
+  color: var(--ocean-teal);
+}
+
+.reveal .slides section[data-part="2"] h2 {
+  color: #5ec4c4;
+}
+
+.reveal .slides section[data-part="3"] h2 {
+  color: var(--ocean-seafoam);
+}
+
+/* ── Print / PDF overrides ───────────────────────────────────────── */
+
+@media print {
+  .reveal {
+    background: var(--ocean-deep) !important;
+    color: var(--ocean-cream) !important;
+  }
+  .reveal .slide-background {
+    background: var(--ocean-deep) !important;
+  }
+}
+
+/* ── Responsive fine-tuning ──────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  html:not(.receiver-mode) {
+    --heading-font-size: 1.9em;
+    --h2-font-size:      1.4em;
+    --slide-font-size:   1em;
+  }
+
+  html:not(.receiver-mode) .two-column {
+    flex-direction: column;
+    gap: 1em;
+  }
+}
+
+
+    /* Inline SVG colors — fallback values for speaker-view iframe context */
+    .svg-diagram text { fill: var(--ocean-cream, #f1faee); font-family: "Source Sans 3", "Noto Sans SC", sans-serif; }
+    .svg-diagram .box { fill: var(--ocean-mid, #223044); stroke: var(--ocean-teal, #2d8b8b); stroke-width: 1.5; }
+    .svg-diagram .box-highlight { fill: var(--ocean-teal, #2d8b8b); }
+    .svg-diagram .box-highlight text { fill: var(--ocean-deep, #1a2332); font-weight: 700; }
+    .svg-diagram .arrow { stroke: var(--ocean-seafoam, #a8dadc); stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    .svg-diagram .arrow-muted { stroke: var(--ocean-mist, #8faab0); stroke-width: 1.5; fill: none; opacity: 0.5; }
+  </style>
+</head>
+<body>
+
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           Title Slide
+           ═══════════════════════════════════════════════════════════ -->
+      <section class="title-slide">
+        <h1>大模型推理 &amp; Inference-Time Scaling</h1>
+        <div class="subtitle">Large Model Inference &amp; Inference-Time Compute Scaling</div>
+        <div class="authors">黄烨威 &nbsp;·&nbsp; 冯启豫 &nbsp;·&nbsp; 丁宣铭 &nbsp;·&nbsp; 张博钜</div>
+        <div class="date">2026 春 · 《大语言模型》课程</div>
+        <aside class="notes">
+          开场：介绍课题 — 大模型推理是 LLM 应用的核心环节，本次课分三部分：
+          Part 1 推理基础、Part 2 推理加速、Part 3 推理时扩展。
+          每部分约 15 分钟，中间自然过渡。
+        </aside>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+           Roadmap
+           ═══════════════════════════════════════════════════════════ -->
+      <section>
+        <h2>今日路线图</h2>
+        <div style="display:flex; gap:1em; margin-top:1em;">
+          <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-teal); border-radius:8px; padding:1em;">
+            <div style="color:var(--ocean-teal); font-weight:700; font-size:0.85em;">Part 1 · ~15 min</div>
+            <div style="font-weight:700; margin:0.3em 0;">推理基础</div>
+            <div class="dim" style="font-size:0.8em;">Transformer → 自回归生成 → KV Cache → 瓶颈分析</div>
+          </div>
+          <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:8px; padding:1em;">
+            <div style="color:#5ec4c4; font-weight:700; font-size:0.85em;">Part 2 · ~15 min</div>
+            <div style="font-weight:700; margin:0.3em 0;">推理加速技术</div>
+            <div class="dim" style="font-size:0.8em;">Speculative Decoding · 量化 · Flash Attention · PagedAttention</div>
+          </div>
+          <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-seafoam); border-radius:8px; padding:1em;">
+            <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.85em;">Part 3 · ~15 min</div>
+            <div style="font-weight:700; margin:0.3em 0;">Inference-Time Scaling</div>
+            <div class="dim" style="font-size:0.8em;">CoT · Self-Consistency · Tree of Thoughts · MCTS · Scaling Laws</div>
+          </div>
+        </div>
+        <aside class="notes">
+          总览三部分。强调这是一条从"理解推理"到"加速推理"再到"用更多推理换更好结果"的逻辑链。
+        </aside>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════
+           Part 1: 推理基础
+           ═══════════════════════════════════════════════════════════ -->
+      <section data-part="1" class="section-slide">
+        <div class="section-number">01</div>
+        <h2>推理基础</h2>
+        <div class="dim">从 Transformer 到自回归生成</div>
+        <aside class="notes">
+          Part 1 开始。主讲人 A 接力。
+        </aside>
+      </section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Part 1: 推理基础 — 从 Transformer 到自回归生成
+     主讲人 A · ~15 min · 11 slides
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- P1-S1: 从序列模型到 Attention (PNG 大图) -->
+<section data-part="1">
+  <h2>从序列模型到 Attention</h2>
+  <div class="img-center">
+    <img src="assets/p1-rnn-vs-attention.png" alt="RNN vs Attention 对比" style="max-height:55vh;">
+  </div>
+  <aside class="notes">
+    大家好，欢迎来到今天的课堂。今天我们的主题是大语言模型的推理，内容分为三个部分：首先我会带大家回顾 Transformer 的推理流程，然后第二部分介绍推理加速技术，第三部分探讨一个有趣的问题——能不能通过增加推理时的计算量来提升模型效果。
+    <br><br>
+    先来看这张对比图。左边是我们熟悉的 RNN，处理序列信息时必须一个一个地传递，信息从 $h_1 \to h_2 \to h_3$，依次串行传递。这就像传话游戏，第一个人的信息要一个个传到最后，中间很容易丢失，训练时还会遇到梯度消失的问题，长距离依赖关系很难学到。
+    <br><br>
+    右边是 Transformer 的核心创新——Attention 机制。它的关键在于：每个位置可以直接"看到"所有其他位置，不需要串行传递。就像所有人同时在一个会议室里，谁想说什么直接说，不需要传话。这种并行性是后面推理加速的重要基础。
+  </aside>
+</section>
+
+<!-- P1-S2: Attention 机制详解 (SVG + 公式) -->
+<section data-part="1">
+  <h2>Self-Attention 机制</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 440 280" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- Arrow marker -->
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- Step boxes -->
+          <rect x="10" y="10" width="120" height="40" rx="6" class="box"/>
+          <text x="70" y="35" text-anchor="middle" font-size="13">输入向量 x</text>
+
+          <line x1="130" y1="30" x2="165" y2="30" class="arrow"/>
+
+          <rect x="170" y="5" width="90" height="24" rx="4" class="box"/>
+          <foreignObject x="170" y="5" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:24px;">$Q = xW_q$</div></foreignObject>
+          <rect x="170" y="33" width="90" height="24" rx="4" class="box"/>
+          <foreignObject x="170" y="33" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:24px;">$K = xW_k$</div></foreignObject>
+          <rect x="170" y="61" width="90" height="24" rx="4" class="box"/>
+          <foreignObject x="170" y="61" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:24px;">$V = xW_v$</div></foreignObject>
+
+          <line x1="260" y1="45" x2="295" y2="45" class="arrow"/>
+
+          <rect x="300" y="25" width="120" height="40" rx="6" class="box"/>
+          <foreignObject x="300" y="28" width="120" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#f1faee;text-align:center;line-height:18px;">$\text{score} = QK^T/\!\sqrt{d}$</div></foreignObject>
+          <foreignObject x="300" y="50" width="120" height="14"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#f1faee;text-align:center;line-height:14px;">$\text{weight}=\text{softmax}$</div></foreignObject>
+
+          <line x1="360" y1="65" x2="360" y2="100" class="arrow"/>
+
+          <rect x="290" y="105" width="140" height="40" rx="6" fill="#2d8b8b" stroke="none"/>
+          <foreignObject x="295" y="108" width="130" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:20px;font-weight:700;">$\text{output} = \text{weight} \cdot V$</div></foreignObject>
+          <text x="360" y="138" text-anchor="middle" font-size="11" fill="#1a2332">加权求和</text>
+
+          <!-- Analogy box -->
+          <rect x="20" y="180" width="400" height="80" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.8"/>
+          <text x="220" y="205" text-anchor="middle" font-size="14" fill="#a8dadc" font-weight="700">图书馆类比</text>
+          <text x="40" y="228" font-size="12" fill="#f1faee">Query (Q)：你的搜索关键词</text>
+          <text x="40" y="248" font-size="12" fill="#f1faee">Key (K)：每本书的标签 · Value (V)：书的内容</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p style="margin-top:0;">核心公式：</p>
+      <div class="math-block">
+        $$\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$
+      </div>
+      <ul style="font-size:0.9em;">
+        <li><span class="accent">Q</span> (Query): 当前 token 想了解什么</li>
+        <li><span class="accent">K</span> (Key): 每个 token 能提供什么信息</li>
+        <li><span class="accent">V</span> (Value): 每个 token 的实际内容</li>
+        <li class="dim">$\sqrt{d_k}$ 缩放防止 softmax 饱和</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    接下来我们详细拆解 Attention 的计算过程。请看屏幕上的公式 $\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^T}{\sqrt{d_k}}\right)V$。
+    <br><br>
+    为了方便理解，我们用一个图书馆的类比。左边这张流程图下面也画了这个类比。想象你去图书馆找资料，你在搜索框输入的关键词就是 Query——你想了解什么。每本书上贴的标签和索引就是 Key——这本书能提供什么信息。书的实际内容就是 Value。
+    <br><br>
+    计算过程是这样的：首先 $Q$ 和 $K$ 做内积，得到一个"相关性分数"——你的关键词和每本书的标签有多匹配。然后过一遍 softmax，把这些分数变成权重，加起来等于 1。最后用这些权重对 $V$ 做加权求和，得到最终输出。
+    <br><br>
+    公式里除以 $\sqrt{d_k}$ 这一步很重要：当维度 $d_k$ 比较大时，$QK^T$ 的内积数值会很大，导致 softmax 输出接近 one-hot，梯度几乎为零。除以 $\sqrt{d_k}$ 可以缓解这个问题。
+  </aside>
+</section>
+
+<!-- P1-S3: Multi-Head Attention (SVG) -->
+<section data-part="1">
+  <h2>Multi-Head Attention</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 300" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- Input -->
+          <rect x="160" y="5" width="100" height="35" rx="6" class="box"/>
+          <text x="210" y="28" text-anchor="middle" font-size="13">输入 Embedding</text>
+
+          <!-- Split arrows -->
+          <line x1="185" y1="40" x2="60" y2="80" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="200" y1="40" x2="170" y2="80" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="220" y1="40" x2="270" y2="80" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="235" y1="40" x2="370" y2="80" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+          <!-- 4 Heads with different colors -->
+          <rect x="15" y="85" width="90" height="70" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+          <text x="60" y="108" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">Head 1</text>
+          <foreignObject x="15" y="118" width="90" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#f1faee;text-align:center;line-height:16px;">$Q_1\ K_1\ V_1$</div></foreignObject>
+          <text x="60" y="145" text-anchor="middle" font-size="10" fill="#8faab0">Attention()</text>
+
+          <rect x="120" y="85" width="90" height="70" rx="6" fill="#223044" stroke="#a8dadc" stroke-width="2"/>
+          <text x="165" y="108" text-anchor="middle" font-size="12" fill="#a8dadc" font-weight="700">Head 2</text>
+          <foreignObject x="120" y="118" width="90" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#f1faee;text-align:center;line-height:16px;">$Q_2\ K_2\ V_2$</div></foreignObject>
+          <text x="165" y="145" text-anchor="middle" font-size="10" fill="#8faab0">Attention()</text>
+
+          <rect x="225" y="85" width="90" height="70" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+          <text x="270" y="108" text-anchor="middle" font-size="12" fill="#2d8b8b" font-weight="700">Head 3</text>
+          <foreignObject x="225" y="118" width="90" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#f1faee;text-align:center;line-height:16px;">$Q_3\ K_3\ V_3$</div></foreignObject>
+          <text x="270" y="145" text-anchor="middle" font-size="10" fill="#8faab0">Attention()</text>
+
+          <rect x="330" y="85" width="90" height="70" rx="6" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+          <text x="375" y="108" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">Head 4</text>
+          <foreignObject x="330" y="118" width="90" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#f1faee;text-align:center;line-height:16px;">$Q_4\ K_4\ V_4$</div></foreignObject>
+          <text x="375" y="145" text-anchor="middle" font-size="10" fill="#8faab0">Attention()</text>
+
+          <!-- Merge arrows -->
+          <line x1="60" y1="155" x2="180" y2="195" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="165" y1="155" x2="195" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="270" y1="155" x2="225" y2="195" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="375" y1="155" x2="240" y2="195" stroke="#e0b060" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+          <!-- Concat -->
+          <rect x="140" y="200" width="140" height="35" rx="6" fill="#2d8b8b" stroke="none"/>
+          <foreignObject x="140" y="205" width="140" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:28px;font-weight:700;">$\text{Concat} \to W_O$</div></foreignObject>
+
+          <!-- Output -->
+          <line x1="210" y1="235" x2="210" y2="260" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah2)"/>
+          <rect x="155" y="265" width="110" height="30" rx="6" class="box"/>
+          <text x="210" y="285" text-anchor="middle" font-size="13">输出向量</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>为什么不只用一个 Attention？</p>
+      <ul style="font-size:0.88em;">
+        <li>每个 Head 学习<span class="accent">不同的注意力模式</span></li>
+        <li>Head 1 可能关注语法关系</li>
+        <li>Head 2 可能关注语义相似性</li>
+        <li>Head 3 可能关注位置关系...</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <div class="callout-title">关键参数</div>
+        <p style="margin:0; font-size:0.85em;">LLaMA-2-7B: 32 heads, $d_{model}=4096$, $d_{head}=128$</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    理解了单个 Attention 之后，一个自然的问题是：为什么不只用一个？为什么要搞多头？
+    <br><br>
+    答案在左边这张图上。每个 Head 有自己独立的 $Q$、$K$、$V$ 权重矩阵，独立计算 Attention，最后把所有头的结果拼接起来，通过一个线性层投影回去。
+    <br><br>
+    关键在于：不同的 Head 会学到不同的注意力模式。比如 Head 1 可能关注语法关系，Head 2 关注语义相似性，Head 3 关注位置关系。通过多个"视角"来看同一句话，模型能捕获更丰富的信息。
+    <br><br>
+    举一个具体的例子：LLaMA-2-7B 有 32 个头，每个头的维度是 128，$32 \times 128 = 4096$ 正好等于模型的隐藏维度 4096。这个设计在后续理解推理的计算量时会用到。
+  </aside>
+</section>
+
+<!-- P1-S4: Transformer Decoder 全貌 (SVG) -->
+<section data-part="1">
+  <h2>Transformer Decoder Block</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 720 520" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-height:70vh;">
+      <defs>
+        <marker id="ah3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+      <g transform="translate(110,0)">
+      <!-- Bottom: Input Embedding -->
+      <rect x="130" y="10" width="240" height="38" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <text x="250" y="34" text-anchor="middle" font-size="14" fill="#5ec4c4" font-weight="600">Input Embedding + 位置编码</text>
+
+      <line x1="250" y1="48" x2="250" y2="70" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- Masked Multi-Head Self-Attention -->
+      <rect x="110" y="75" width="280" height="45" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+      <text x="250" y="102" text-anchor="middle" font-size="14" fill="#2d8b8b" font-weight="700">Masked Multi-Head Self-Attention</text>
+
+      <!-- Residual + Add & Norm -->
+      <line x1="420" y1="97" x2="440" y2="97" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+      <line x1="440" y1="30" x2="440" y2="97" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+      <line x1="440" y1="30" x2="420" y2="30" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+      <text x="460" y="65" font-size="10" fill="#8faab0" transform="rotate(90,460,65)">残差</text>
+
+      <line x1="250" y1="120" x2="250" y2="140" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+      <rect x="185" y="143" width="130" height="30" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1"/>
+      <text x="250" y="163" text-anchor="middle" font-size="13" fill="#a8dadc">Add &amp; LayerNorm</text>
+
+      <line x1="250" y1="173" x2="250" y2="195" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- FFN -->
+      <rect x="130" y="200" width="240" height="45" rx="6" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+      <text x="250" y="220" text-anchor="middle" font-size="13" fill="#e0b060" font-weight="700">Feed-Forward Network</text>
+      <foreignObject x="130" y="225" width="240" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:20px;">$\text{FFN}(x) = W_2 \cdot \text{ReLU}(W_1 \cdot x + b_1) + b_2$</div></foreignObject>
+
+      <!-- Residual -->
+      <line x1="420" y1="222" x2="440" y2="222" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+      <line x1="440" y1="158" x2="440" y2="222" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+      <line x1="440" y1="158" x2="420" y2="158" stroke="#a8dadc" stroke-width="1" opacity="0.5"/>
+
+      <line x1="250" y1="245" x2="250" y2="265" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+      <rect x="185" y="268" width="130" height="30" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1"/>
+      <text x="250" y="288" text-anchor="middle" font-size="13" fill="#a8dadc">Add &amp; LayerNorm</text>
+
+      <line x1="250" y1="298" x2="250" y2="320" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- Stack indicator -->
+      <rect x="90" y="325" width="320" height="50" rx="8" fill="none" stroke="#8faab0" stroke-width="1" stroke-dasharray="6 3"/>
+      <foreignObject x="90" y="338" width="320" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#8faab0;text-align:center;line-height:20px;">$\uparrow$ 重复 $N$ 层（LLaMA-2-7B: $N=32$）</div></foreignObject>
+      <text x="250" y="366" text-anchor="middle" font-size="11" fill="#8faab0">每一层都有自己的 Attention 和 FFN 权重</text>
+
+      <line x1="250" y1="375" x2="250" y2="400" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- Output -->
+      <rect x="145" y="405" width="210" height="38" rx="6" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="145" y="410" width="210" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:18px;font-weight:700;">$\text{Linear} \to \text{Softmax}$</div></foreignObject>
+      <foreignObject x="150" y="427" width="200" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#1a2332;text-align:center;line-height:18px;">$P(\text{next token} \mid \text{context})$</div></foreignObject>
+
+      <!-- Annotation -->
+      <rect x="20" y="460" width="460" height="50" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+      <text x="250" y="482" text-anchor="middle" font-size="12" fill="#a8dadc">Masked: 只能看到当前及之前的 token（因果性约束）</text>
+      <foreignObject x="60" y="487" width="380" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#8faab0;text-align:center;line-height:20px;">这是"自回归"的基础 — 生成第 $t$ 个 token 时不能偷看第 $t\!+\!1$ 个</div></foreignObject>
+      </g>
+    </svg>
+  </div>
+  <aside class="notes">
+    现在我们把 Attention 放到完整的 Transformer Decoder 里。请看这张结构图，从下往上看。
+    <br><br>
+    最下面是输入经过 Embedding 和位置编码。然后进入 Masked Multi-Head Self-Attention，注意这里是 Masked 的——每个位置只能看到自己和之前的位置，不能"偷看"后面的 token。这是因果性约束，也是后面自回归生成的基础。
+    <br><br>
+    接下来是 Add and LayerNorm——残差连接加层归一化。残差连接把输入直接加到输出上，缓解了深层网络的梯度消失问题。然后是 Feed-Forward Network，也就是 FFN，由两个线性层和一个激活函数组成，存储了模型大部分的参数。
+    <br><br>
+    这个 Attention 加 FFN 的结构会在上方虚线框里重复堆叠。比如 LLaMA-2-7B 就堆叠了 32 层，每一层都有自己独立的参数。最终通过一个线性层和 Softmax，输出词表上的概率分布。
+  </aside>
+</section>
+
+<!-- P1-S5: 自回归生成 (SVG + 公式) -->
+<section data-part="1">
+  <h2>自回归生成 (Autoregressive Generation)</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 440 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- Step 1 -->
+          <rect x="20" y="20" width="130" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+          <text x="85" y="42" text-anchor="middle" font-size="12" fill="#2d8b8b" font-weight="700">Step 1</text>
+          <foreignObject x="20" y="50" width="130" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#f1faee;text-align:center;line-height:18px;font-weight:700;">[BOS] $\to$ <span style="color:#5ec4c4;">今</span></div></foreignObject>
+
+          <line x1="150" y1="47" x2="170" y2="47" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah4)"/>
+
+          <!-- Step 2 -->
+          <rect x="175" y="20" width="130" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+          <text x="240" y="42" text-anchor="middle" font-size="12" fill="#2d8b8b" font-weight="700">Step 2</text>
+          <foreignObject x="175" y="50" width="130" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#f1faee;text-align:center;line-height:18px;">[BOS] 今 $\to$ <span style="color:#5ec4c4;">天</span></div></foreignObject>
+
+          <line x1="305" y1="47" x2="325" y2="47" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah4)"/>
+
+          <!-- Step 3 -->
+          <rect x="330" y="20" width="100" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+          <text x="380" y="42" text-anchor="middle" font-size="12" fill="#2d8b8b" font-weight="700">Step 3</text>
+          <foreignObject x="330" y="50" width="100" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#f1faee;text-align:center;line-height:18px;">... $\to$ <span style="color:#5ec4c4;">天</span></div></foreignObject>
+
+          <!-- Dots -->
+          <text x="220" y="120" text-anchor="middle" font-size="30" fill="#8faab0">···</text>
+
+          <!-- Loop diagram -->
+          <rect x="60" y="150" width="320" height="140" rx="10" fill="#1a2332" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="220" y="175" text-anchor="middle" font-size="14" fill="#5ec4c4" font-weight="700">生成循环</text>
+
+          <rect x="80" y="190" width="110" height="35" rx="6" fill="#2d8b8b" stroke="none"/>
+          <text x="135" y="212" text-anchor="middle" font-size="12" fill="#1a2332" font-weight="700">已生成 tokens</text>
+
+          <line x1="190" y1="207" x2="215" y2="207" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah4)"/>
+
+          <rect x="220" y="190" width="80" height="35" rx="6" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+          <text x="260" y="212" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">模型</text>
+
+          <line x1="300" y1="207" x2="325" y2="207" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah4)"/>
+
+          <rect x="330" y="190" width="35" height="35" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+          <foreignObject x="330" y="193" width="35" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;font-weight:700;">$y_t$</div></foreignObject>
+
+          <!-- Loop arrow -->
+          <path d="M347 225 L347 260 L135 260 L135 225" stroke="#8faab0" stroke-width="1.5" fill="none" stroke-dasharray="5 3" marker-end="url(#ah4)"/>
+          <text x="240" y="278" text-anchor="middle" font-size="11" fill="#8faab0">追加到已生成序列，继续循环</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>核心思想：<span class="accent">逐 token 生成</span>，每次根据已有内容预测下一个</p>
+      <div class="math-block">
+        $$P(y_t \mid y_{\lt t}, x) = \text{softmax}(W \cdot h_t)$$
+      </div>
+      <ul style="font-size:0.9em;">
+        <li>$x$ = 输入 prompt</li>
+        <li>$y_{\lt t}$ = 已生成的 tokens</li>
+        <li>$h_t$ = Decoder 最后一层的隐状态</li>
+        <li>每次只生成<span class="accent">一个 token</span>，追加后继续</li>
+        <li>遇到 <code>[EOS]</code> 或达到长度上限时停止</li>
+      </ul>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">为什么慢？</div>
+        <p style="margin:0; font-size:0.85em;">生成 1000 个 token 需要跑 <strong>1000 次</strong>前向传播！</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    有了 Transformer Decoder 的结构，我们来看它是怎么生成文字的。
+    <br><br>
+    核心思想很简单：逐个 token 生成，每次根据已有的内容预测下一个。请看左边的示意图：第一步输入起始符 BOS，模型预测出"今"字。第二步把"今"追加进去，模型预测"天"。第三步继续，直到遇到结束符或者达到长度上限。
+    <br><br>
+    右边是这个过程的数学表达。$h_t$ 是 Decoder 最后一层输出的隐状态，通过一个线性层加 softmax，得到词表上的概率分布。选择概率最大的或者采样的 token 作为下一个输出。
+    <br><br>
+    请大家注意右下角这个提示：生成 1000 个 token 需要跑 1000 次前向传播。这就是 LLM 推理慢的根本原因——每生成一个词，整个模型都要完整跑一遍。记住这一点，后面讲加速技术时会用到。
+  </aside>
+</section>
+
+<!-- P1-S6: Prefill vs Decode (SVG + 公式) -->
+<section data-part="1">
+  <h2>Prefill vs Decode：推理的两个阶段</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 800 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <defs>
+        <marker id="ah5" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+      <!-- Prefill -->
+      <text x="200" y="25" text-anchor="middle" font-size="18" fill="#2d8b8b" font-weight="700">Prefill 阶段</text>
+      <text x="200" y="45" text-anchor="middle" font-size="12" fill="#8faab0">处理所有输入 tokens（并行）</text>
+
+      <!-- Matrix multiplication -->
+      <rect x="50" y="60" width="80" height="100" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+      <text x="90" y="105" text-anchor="middle" font-size="13" fill="#f1faee">Prompt</text>
+      <foreignObject x="60" y="115" width="60" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:18px;">$N \times d$</div></foreignObject>
+
+      <foreignObject x="140" y="101" width="20" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:20px;color:#2d8b8b;text-align:center;line-height:28px;">$\times$</div></foreignObject>
+
+      <rect x="165" y="60" width="80" height="100" rx="4" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+      <text x="205" y="105" text-anchor="middle" font-size="13" fill="#f1faee">W</text>
+      <foreignObject x="175" y="115" width="60" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:18px;">$d \times d$</div></foreignObject>
+
+      <text x="265" y="115" text-anchor="middle" font-size="20" fill="#2d8b8b">=</text>
+
+      <rect x="280" y="60" width="80" height="100" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <text x="320" y="105" text-anchor="middle" font-size="13" fill="#f1faee">Output</text>
+      <foreignObject x="290" y="115" width="60" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:18px;">$N \times d$</div></foreignObject>
+
+      <rect x="80" y="175" width="260" height="35" rx="6" fill="#2d8b8b" stroke="none" opacity="0.2"/>
+      <text x="210" y="197" text-anchor="middle" font-size="13" fill="#2d8b8b" font-weight="600">矩阵乘法 — Compute-bound</text>
+      <text x="210" y="230" text-anchor="middle" font-size="12" fill="#8faab0">一次算完所有 input tokens</text>
+      <foreignObject x="100" y="238" width="220" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#8faab0;text-align:center;line-height:20px;">FLOPs: $O(N \cdot d^2)$</div></foreignObject>
+
+      <!-- Divider -->
+      <line x1="420" y1="10" x2="420" y2="310" stroke="#8faab0" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+
+      <!-- Decode -->
+      <text x="620" y="25" text-anchor="middle" font-size="18" fill="#5ec4c4" font-weight="700">Decode 阶段</text>
+      <text x="620" y="45" text-anchor="middle" font-size="12" fill="#8faab0">逐个生成 tokens（串行）</text>
+
+      <!-- Vector multiplication -->
+      <rect x="470" y="70" width="40" height="80" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <foreignObject x="470" y="90" width="40" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:22px;">$y_t$</div></foreignObject>
+      <foreignObject x="470" y="112" width="40" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#8faab0;text-align:center;line-height:18px;">$1 \times d$</div></foreignObject>
+
+      <foreignObject x="520" y="101" width="20" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:20px;color:#5ec4c4;text-align:center;line-height:28px;">$\times$</div></foreignObject>
+
+      <rect x="545" y="60" width="80" height="100" rx="4" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+      <text x="585" y="105" text-anchor="middle" font-size="13" fill="#f1faee">W</text>
+      <foreignObject x="555" y="115" width="60" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:18px;">$d \times d$</div></foreignObject>
+
+      <text x="645" y="115" text-anchor="middle" font-size="20" fill="#5ec4c4">=</text>
+
+      <rect x="660" y="70" width="40" height="80" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <foreignObject x="660" y="90" width="40" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:22px;">$h_t$</div></foreignObject>
+      <foreignObject x="660" y="112" width="40" height="18"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#8faab0;text-align:center;line-height:18px;">$1 \times d$</div></foreignObject>
+
+      <rect x="480" y="175" width="260" height="35" rx="6" fill="#5ec4c4" stroke="none" opacity="0.15"/>
+      <text x="610" y="197" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="600">向量乘法 — Memory-bound</text>
+      <text x="610" y="230" text-anchor="middle" font-size="12" fill="#8faab0">每步只算 1 个 token</text>
+      <foreignObject x="500" y="238" width="220" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#8faab0;text-align:center;line-height:20px;">FLOPs: $O(d^2)$ per token</div></foreignObject>
+
+      <!-- Bottom note -->
+      <rect x="50" y="270" width="720" height="40" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.6"/>
+      <text x="410" y="295" text-anchor="middle" font-size="13" fill="#a8dadc">关键区别：Prefill 是 <tspan fill="#2d8b8b" font-weight="700">矩阵乘法</tspan>（计算密集），Decode 是 <tspan fill="#5ec4c4" font-weight="700">向量乘法</tspan>（访存密集）</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    进一步细化推理过程，我们可以把它分成两个阶段：Prefill 和 Decode。
+    <br><br>
+    请看左边，Prefill 阶段。用户的整个 prompt 一次性送入模型，做的是矩阵乘法——一个 $N \times d$ 的输入矩阵乘以 $d \times d$ 的权重矩阵。这是典型的计算密集型操作，GPU 的算力可以充分利用。
+    <br><br>
+    再看右边，Decode 阶段。每次只有一个新 token 进来，做的是向量乘法——一个 $1 \times d$ 的向量乘以 $d \times d$ 的权重矩阵。计算量很小，但每次都要从显存里读取整个权重矩阵。所以瓶颈不在算力，而在显存带宽——这就是 Memory-bound。
+    <br><br>
+    打个比方：Prefill 像是快递员一次性送一批快递，效率很高。Decode 像是每次只送一个快递但都要跑一趟仓库取货，大部分时间花在路上。
+  </aside>
+</section>
+
+<!-- P1-S7: KV Cache 原理 (SVG) -->
+<section data-part="1">
+  <h2>KV Cache：避免重复计算</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 750 350" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <!-- Without KV Cache -->
+      <text x="185" y="25" text-anchor="middle" font-size="16" fill="#e09060" font-weight="700">❌ 无 KV Cache</text>
+
+      <!-- Time steps without cache -->
+      <g transform="translate(0, 40)">
+        <!-- t=1 -->
+        <rect x="20" y="0" width="120" height="30" rx="4" fill="#2d8b8b" stroke="none" opacity="0.6"/>
+        <text x="80" y="20" text-anchor="middle" font-size="11" fill="#1a2332">t=1: 算 [a] 的 K,V</text>
+        <!-- t=2 -->
+        <rect x="20" y="35" width="120" height="30" rx="4" fill="#e09060" stroke="none" opacity="0.5"/>
+        <text x="80" y="55" text-anchor="middle" font-size="11" fill="#f1faee">t=2: 算 [a,<tspan fill="#2d8b8b">b</tspan>] 的 K,V</text>
+        <!-- t=3 -->
+        <rect x="20" y="70" width="120" height="30" rx="4" fill="#e09060" stroke="none" opacity="0.5"/>
+        <text x="80" y="90" text-anchor="middle" font-size="11" fill="#f1faee">t=3: 算 [a,b,<tspan fill="#2d8b8b">c</tspan>] 的 K,V</text>
+        <!-- t=4 -->
+        <rect x="20" y="105" width="120" height="30" rx="4" fill="#e09060" stroke="none" opacity="0.5"/>
+        <text x="80" y="125" text-anchor="middle" font-size="11" fill="#f1faee">t=4: 算 [a,b,c,<tspan fill="#2d8b8b">d</tspan>] 的 K,V</text>
+
+        <!-- Red highlight for repeated -->
+        <rect x="20" y="35" width="120" height="100" rx="4" fill="none" stroke="#e09060" stroke-width="2" stroke-dasharray="4 2"/>
+        <text x="80" y="155" text-anchor="middle" font-size="11" fill="#e09060">⚠ 重复计算！</text>
+      </g>
+
+      <!-- Divider -->
+      <line x1="175" y1="10" x2="175" y2="340" stroke="#8faab0" stroke-width="1" stroke-dasharray="4 4" opacity="0.3"/>
+
+      <!-- With KV Cache -->
+      <text x="480" y="25" text-anchor="middle" font-size="16" fill="#5ec4c4" font-weight="700">✅ 有 KV Cache</text>
+
+      <g transform="translate(0, 40)">
+        <!-- Cache box -->
+        <rect x="290" y="0" width="370" height="50" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+        <text x="475" y="18" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">KV Cache（显存中）</text>
+        <text x="475" y="38" text-anchor="middle" font-size="11" fill="#8faab0">存储所有已计算的 K, V 向量</text>
+
+        <!-- t=1 -->
+        <rect x="290" y="65" width="160" height="30" rx="4" fill="#2d8b8b" stroke="none" opacity="0.6"/>
+        <foreignObject x="290" y="70" width="160" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#1a2332;text-align:center;line-height:22px;">$t\!=\!1$: 计算 $K_1, V_1$ $\to$ 存入 cache</div></foreignObject>
+
+        <!-- t=2 -->
+        <rect x="290" y="100" width="160" height="30" rx="4" fill="#5ec4c4" stroke="none" opacity="0.3"/>
+        <foreignObject x="290" y="105" width="160" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#f1faee;text-align:center;line-height:22px;">$t\!=\!2$: 只算 $K_2, V_2$ $\to$ cache 读取 $K_1, V_1$</div></foreignObject>
+
+        <!-- t=3 -->
+        <rect x="290" y="135" width="160" height="30" rx="4" fill="#5ec4c4" stroke="none" opacity="0.3"/>
+        <foreignObject x="290" y="140" width="160" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#f1faee;text-align:center;line-height:22px;">$t\!=\!3$: 只算 $K_3, V_3$ $\to$ cache 读取 $K_1, V_1, K_2, V_2$</div></foreignObject>
+
+        <!-- Green highlight -->
+        <rect x="290" y="100" width="160" height="65" rx="4" fill="none" stroke="#5ec4c4" stroke-width="2"/>
+        <text x="370" y="185" text-anchor="middle" font-size="11" fill="#5ec4c4">只计算新 token 的 K,V ✓</text>
+
+        <!-- Summary -->
+        <rect x="270" y="210" width="220" height="80" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="1"/>
+        <text x="380" y="235" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">Trade-off</text>
+        <text x="380" y="255" text-anchor="middle" font-size="11" fill="#8faab0">节省重复计算 → 加速推理</text>
+        <text x="380" y="275" text-anchor="middle" font-size="11" fill="#8faab0">但占用额外显存存储 K, V</text>
+      </g>
+    </svg>
+  </div>
+  <aside class="notes">
+    接下来看推理加速最基本也最重要的技术——KV Cache。
+    <br><br>
+    请看左半边，没有 KV Cache 的情况。$t=1$ 时计算 token a 的 $K$ 和 $V$。$t=2$ 时要把 a 和新的 token b 一起重新算 $K$ 和 $V$。$t=3$ 又要把 a、b、c 全部重算。虚线框里标红的都是重复计算——之前算过的 $K$ 和 $V$，每次又要重新算一遍，非常浪费。
+    <br><br>
+    右边是有了 KV Cache 的做法。$t=1$ 算出 $K_1$ 和 $V_1$，存入 cache。$t=2$ 只需要算新 token 的 $K_2$ 和 $V_2$，然后从 cache 里读取之前的 $K_1$ 和 $V_1$。$t=3$ 同理，只算 $K_3$ 和 $V_3$，从 cache 读取之前所有的 $K$ 和 $V$。
+    <br><br>
+    Trade-off 很明显：KV Cache 节省了大量重复计算，加速了推理，但代价是占用额外的显存来存储这些 $K$ 和 $V$ 向量。具体占多少呢？下一张 slide 来量化分析。
+  </aside>
+</section>
+
+<!-- P1-S8: KV Cache 显存分析 (代码图表 + 公式) -->
+<section data-part="1">
+  <h2>KV Cache 占多少显存？</h2>
+  <div class="two-column">
+    <div>
+      <div class="math-block">
+        $$M_{\text{KV}} = 2 \times n_{\text{layers}} \times n_{\text{heads}} \times d_{\text{head}} \times S \times \text{bytes}$$
+      </div>
+      <table style="font-size:0.85em; margin-top:0.5em;">
+        <tr><th>参数</th><th>含义</th><th>LLaMA-2-7B</th></tr>
+        <tr><td>$n_{\text{layers}}$</td><td>层数</td><td>32</td></tr>
+        <tr><td>$n_{\text{heads}} \times d_{\text{head}}$</td><td>注意力维度</td><td>4096</td></tr>
+        <tr><td>$S$</td><td>序列长度</td><td>变量</td></tr>
+        <tr><td>bytes</td><td>精度 (FP16)</td><td>2</td></tr>
+      </table>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">计算示例</div>
+        <p style="margin:0; font-size:0.82em;">LLaMA-2-7B, $S=4096$:<br>
+        $M = 2 \times 32 \times 4096 \times 4096 \times 2$ <strong>$= 2\,\mathrm{GB}$</strong></p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-kv-memory.png" alt="KV Cache 显存占用" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成。模型参数来自 Touvron et al. 2023 / HuggingFace LlamaConfig）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    KV Cache 到底占多少显存？请看这个公式。$M_{\text{KV}}$ 等于 $2 \times n_{\text{layers}} \times d_{\text{head}} \times n_{\text{heads}} \times S \times \text{bytes}$。其中 $2$ 是因为要同时存 $K$ 和 $V$ 两份。
+    <br><br>
+    我们用 LLaMA-2-7B 的具体参数来算。$n_{\text{layers}}=32$，注意力维度 $4096$，FP16 精度下每个元素 $2$ 字节。当序列长度 $S=4096$ 时，代入公式：$2 \times 32 \times 4096 \times 4096 \times 2 = 2\,\text{GB}$。
+    <br><br>
+    也就是说，仅仅是为了存储 KV Cache，序列长度 $S=4096$ 时就要 $2\,\text{GB}$ 显存。如果换成 70B 的模型，或者更长的序列，这个数字会更加夸张。
+    <br><br>
+    右边的柱状图直观展示了不同序列长度下的显存占用。大家可以看到，长文本场景下 KV Cache 会成为显存瓶颈。这就是为什么后面会有 PagedAttention 等技术来优化 KV Cache 的管理。
+  </aside>
+</section>
+
+<!-- P1-S9: 推理延迟分解 (代码图表) -->
+<section data-part="1">
+  <h2>推理延迟分解</h2>
+  <div class="two-column">
+    <div>
+      <div class="math-block">
+        $$T_{\text{total}} = T_{\text{prefill}} + N \times T_{\text{decode}}$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li><span class="accent">TTFT</span> (Time To First Token) $= T_{\text{prefill}}$
+          <div class="dim" style="font-size:0.85em;">用户发 prompt 到看到第一个 token 的时间</div>
+        </li>
+        <li style="margin-top:0.4em;"><span class="accent">TPOT</span> (Time Per Output Token) $= T_{\text{decode}}$
+          <div class="dim" style="font-size:0.85em;">每生成一个 token 的平均时间</div>
+        </li>
+      </ul>
+      <div class="callout" style="margin-top:0.6em;">
+        <div class="callout-title">瓶颈在哪里？</div>
+        <p style="margin:0; font-size:0.85em;">对于长生成（$N$ 大），<strong>Decode 阶段 dominates</strong>，因为 Decode 是 memory-bound（受限于显存带宽）</p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-latency-breakdown.png" alt="推理延迟分解" style="max-height:50vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，延迟值基于 LLaMA-2-7B FP16 在 A100 上的典型推理延迟）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    有了 Prefill/Decode 和 KV Cache 的概念，我们可以精确地分析推理延迟了。
+    <br><br>
+    总延迟 $T_{\text{total}} = T_{\text{prefill}} + N \times T_{\text{decode}}$，这里 $N$ 是输出 token 的数量。两个关键指标：TTFT 也就是 Time To First Token，$= T_{\text{prefill}}$，代表用户发出 prompt 后等多久才能看到第一个字。TPOT 也就是 Time Per Output Token，$= T_{\text{decode}}$，代表每生成一个 token 要多久。
+    <br><br>
+    关键洞察在右边的瀑布图里。当生成 500 或 1000 个 token 时，Decode 阶段占据了绝大部分时间。因为 Decode 是 Memory-bound 的——每步都要从显存读取整个权重矩阵，但只做一次很小的向量乘法，GPU 算力大量闲置。
+    <br><br>
+    所以加速推理的重点，在于优化 Decode 阶段的 Memory-bound 问题。具体怎么优化呢？这就是 Part 2 要讲的内容。
+  </aside>
+</section>
+
+<!-- P1-S10: 推理全流程总览 -->
+<section data-part="1">
+  <h2>LLM 推理全流程：从输入到输出</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;">
+      <!-- Main pipeline boxes -->
+      <defs>
+        <marker id="arrow-gray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="#8faab0"/>
+        </marker>
+      </defs>
+
+      <!-- Box 1: Input -->
+      <rect x="10" y="30" width="120" height="60" rx="8" fill="#223044" stroke="#8faab0" stroke-width="1.5"/>
+      <text x="70" y="55" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">用户输入</text>
+      <text x="70" y="75" text-anchor="middle" font-size="10" fill="#8faab0">自然语言 Prompt</text>
+
+      <!-- Arrow 1→2 -->
+      <line x1="130" y1="60" x2="158" y2="60" stroke="#8faab0" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- Box 2: Tokenization -->
+      <rect x="160" y="30" width="120" height="60" rx="8" fill="#223044" stroke="#8faab0" stroke-width="1.5"/>
+      <text x="220" y="55" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">Tokenization</text>
+      <text x="220" y="75" text-anchor="middle" font-size="10" fill="#8faab0">文本 → Token IDs</text>
+
+      <!-- Arrow 2→3 -->
+      <line x1="280" y1="60" x2="308" y2="60" stroke="#8faab0" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- Box 3: Prefill (highlighted) -->
+      <rect x="310" y="20" width="170" height="80" rx="8" fill="#2d8b8b" fill-opacity="0.2" stroke="#2d8b8b" stroke-width="2"/>
+      <text x="395" y="45" text-anchor="middle" font-size="14" fill="#5ec4c4" font-weight="700">Prefill</text>
+      <text x="395" y="65" text-anchor="middle" font-size="10" fill="#a8dadc">并行处理全部 Prompt Tokens</text>
+      <text x="395" y="85" text-anchor="middle" font-size="10" fill="#2d8b8b">Compute-bound · 矩阵乘</text>
+
+      <!-- Arrow 3→4 -->
+      <line x1="480" y1="60" x2="508" y2="60" stroke="#8faab0" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- Box 4: Decode Loop (highlighted, key bottleneck) -->
+      <rect x="510" y="10" width="190" height="100" rx="8" fill="#e09060" fill-opacity="0.15" stroke="#e09060" stroke-width="2"/>
+      <text x="605" y="35" text-anchor="middle" font-size="14" fill="#e09060" font-weight="700">Decode Loop</text>
+      <text x="605" y="55" text-anchor="middle" font-size="10" fill="#a8dadc">逐 Token 生成（自回归）</text>
+      <text x="605" y="73" text-anchor="middle" font-size="10" fill="#e09060">Memory-bound · 向量乘</text>
+      <text x="605" y="93" text-anchor="middle" font-size="9" fill="#8faab0">KV Cache 逐步增长 📦</text>
+
+      <!-- Loop arrow -->
+      <path d="M700,60 Q730,60 730,40 Q730,20 700,20" fill="none" stroke="#e09060" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <polygon points="702,16 702,24 694,20" fill="#e09060"/>
+
+      <!-- Arrow 4→5 -->
+      <line x1="700" y1="60" x2="728" y2="60" stroke="#8faab0" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- Box 5: Detokenization -->
+      <rect x="730" y="30" width="120" height="60" rx="8" fill="#223044" stroke="#8faab0" stroke-width="1.5"/>
+      <text x="790" y="55" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">Detokenize</text>
+      <text x="790" y="75" text-anchor="middle" font-size="10" fill="#8faab0">Token IDs → 文本</text>
+
+      <!-- Arrow 5→6 -->
+      <line x1="850" y1="60" x2="878" y2="60" stroke="#8faab0" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- Box 6: Output -->
+      <rect x="880" y="30" width="10" height="60" rx="0" fill="none"/>
+
+      <!-- Bottom: Key metrics row -->
+      <rect x="30" y="140" width="840" height="90" rx="8" fill="#223044" stroke="#3a4a5e" stroke-width="1"/>
+      <text x="450" y="165" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">关键性能指标</text>
+
+      <!-- TTFT -->
+      <rect x="60" y="178" width="230" height="40" rx="6" fill="#2d8b8b" fill-opacity="0.15" stroke="#2d8b8b" stroke-width="1"/>
+      <text x="175" y="195" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">TTFT</text>
+      <text x="175" y="212" text-anchor="middle" font-size="10" fill="#8faab0">Time To First Token ≈ Prefill</text>
+
+      <!-- TPOT -->
+      <rect x="335" y="178" width="230" height="40" rx="6" fill="#e09060" fill-opacity="0.15" stroke="#e09060" stroke-width="1"/>
+      <text x="450" y="195" text-anchor="middle" font-size="12" fill="#e09060" font-weight="700">TPOT</text>
+      <text x="450" y="212" text-anchor="middle" font-size="10" fill="#8faab0">Time Per Output Token ≈ Decode</text>
+
+      <!-- Total -->
+      <rect x="610" y="178" width="240" height="40" rx="6" fill="#223044" stroke="#a8dadc" stroke-width="1"/>
+      <text x="730" y="195" text-anchor="middle" font-size="12" fill="#a8dadc" font-weight="700">Total Latency</text>
+      <foreignObject x="610" y="200" width="240" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:10px;color:#8faab0;text-align:center;line-height:20px;">$T_{\text{prefill}} + N \times T_{\text{decode}}$</div></foreignObject>
+
+      <!-- Bottom insight -->
+      <rect x="30" y="250" width="840" height="50" rx="8" fill="#223044" stroke="#e0b060" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="450" y="272" text-anchor="middle" font-size="11" fill="#e0b060">长生成场景：Decode 阶段 dominates → 加速推理的重点在优化 Decode 的 Memory-bound 问题</text>
+      <text x="450" y="290" text-anchor="middle" font-size="10" fill="#8faab0">下一部分将介绍：Speculative Decoding · 量化 · Flash Attention · PagedAttention</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    这张 slide 把前面讲的所有概念串成了一个完整的推理流程图，大家跟着我从左到右看一遍。
+    <br><br>
+    用户输入一段自然语言的 prompt，首先经过 Tokenization 转换成 token ID 序列。然后进入 Prefill 阶段，并行处理所有 prompt token，这一步是 Compute-bound 的矩阵乘法。接着进入 Decode Loop，逐个 token 生成，每步都是 Memory-bound 的向量乘法，KV Cache 逐步增长。生成结束后，经过 Detokenization 把 token ID 转回文本输出。
+    <br><br>
+    下方标注了三个关键性能指标：TTFT、TPOT 和总延迟。对于长生成场景，Decode 阶段 dominates，加速推理的重点就在这里。底部也预告了下一部分的优化技术：Speculative Decoding、量化、Flash Attention、PagedAttention。
+  </aside>
+</section>
+
+<!-- P1-S11: 小结 & 过渡 -->
+<section data-part="1">
+  <h2>Part 1 小结</h2>
+  <div style="display:flex; gap:1.2em;">
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-teal);">
+        <div style="color:var(--ocean-teal); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">核心概念</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>Attention: $QK^T/\sqrt{d_k} \cdot V$</li>
+          <li>自回归: 逐 token 生成</li>
+          <li>KV Cache: 避免重复计算</li>
+        </ul>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">关键洞察</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>Prefill $=$ Compute-bound</li>
+          <li>Decode $=$ Memory-bound</li>
+          <li>长生成时 Decode dominates</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1.2em; text-align:center;">
+    <p style="margin:0; font-size:1.15em;">了解了推理流程和瓶颈，<span class="accent">接下来看如何加速</span> → <strong>Part 2</strong></p>
+  </div>
+  <aside class="notes">
+    Part 1 到此结束。我们回顾一下三个核心概念：Attention 机制，自回归生成，以及 KV Cache。以及三个关键洞察：Prefill 是 Compute-bound，Decode 是 Memory-bound，长生成时 Decode dominates。
+    <br><br>
+    既然 Decode 阶段的内存带宽是瓶颈，我们有哪些技术来加速呢？接下来请 X 同学来介绍 Part 2——推理加速技术。
+  </aside>
+</section>
+
+
+      <!-- ═══════════════════════════════════════════════════════════
+           Part 2: 推理加速技术
+           ═══════════════════════════════════════════════════════════ -->
+      <section data-part="2" class="section-slide">
+        <div class="section-number">02</div>
+        <h2>推理加速技术</h2>
+        <div class="dim">从瓶颈分析到系统优化</div>
+        <aside class="notes">
+          Part 1 结束，过渡到 Part 2。主讲人 B 接力。
+          过渡语：了解了推理流程和瓶颈，接下来看如何加速这个过程。
+        </aside>
+      </section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Part 2: 推理加速技术
+     主讲人 B · ~15 min · 10 slides
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- P2-S1: 推理瓶颈分类 (代码图表: Roofline) -->
+<section data-part="2">
+  <h2>推理瓶颈：Memory-bound vs Compute-bound</h2>
+  <div class="two-column">
+    <div>
+      <div class="math-block">
+        $$\text{Arithmetic Intensity} = \frac{\text{FLOPs}}{\text{Bytes accessed}}$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li><span class="accent">Memory-bound</span>: 算术强度低，GPU 等待数据
+          <div class="dim" style="font-size:0.85em;">→ Decode 阶段的 Attention 计算</div>
+        </li>
+        <li><span class="accent">Compute-bound</span>: 算术强度高，GPU 算力饱和
+          <div class="dim" style="font-size:0.85em;">→ Prefill 阶段的大矩阵乘法</div>
+        </li>
+      </ul>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">核心洞察</div>
+        <p style="margin:0; font-size:0.85em;">LLM 推理的瓶颈在 <strong>Decode 阶段的内存带宽</strong>，不是算力。加速的关键：减少访存量或提高访存效率。</p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-roofline.png" alt="Roofline Model" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">Roofline Model（图表由 Python 生成。硬件参数参考 NVIDIA A100 80GB SXM4 规格：HBM 带宽 2039 GB/s，FP16 Tensor Core 312 TFLOPS）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    大家好，承接刚才的内容，我们知道 LLM 推理的瓶颈在 Decode 阶段的内存带宽。这一页我们从更底层的视角来分析。
+    <br><br>
+    Roofline Model 是分析硬件性能瓶颈的经典模型。核心概念是算术强度，等于计算量除以访存量。算术强度低意味着 GPU 大量时间在等数据，这就是 Memory-bound。算术强度高意味着 GPU 算力跑满了，这就是 Compute-bound。
+    <br><br>
+    看右边的 Roofline 图。在算术强度较低的区域，性能被内存带宽限制，曲线是上升的。到了算术强度足够高时，性能被算力限制，曲线变成平台。LLM 的 Decode 阶段恰恰落在左边这个上升区域——每个 token 要读取几十 GB 的模型权重，但只做几 GFLOP 的计算，算术强度很低。
+    <br><br>
+    所以加速推理有三个核心方向：减少模型大小，也就是量化；减少访存次数，比如 Flash Attention；或者用小模型来帮忙，也就是 Speculative Decoding。接下来逐一介绍。
+  </aside>
+</section>
+
+<!-- P2-S2: Speculative Decoding 原理 (SVG) -->
+<section data-part="2">
+  <h2>Speculative Decoding（投机解码）</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 800 310" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <defs>
+        <marker id="ah-p2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+
+      <!-- Step 1: Draft -->
+      <rect x="20" y="20" width="230" height="130" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <text x="135" y="48" text-anchor="middle" font-size="14" fill="#5ec4c4" font-weight="700">Step 1: Draft（草拟）</text>
+      <text x="135" y="68" text-anchor="middle" font-size="11" fill="#8faab0">小模型快速生成 K 个 token</text>
+
+      <rect x="40" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="40" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_1$</div></foreignObject>
+      <rect x="110" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="110" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_2$</div></foreignObject>
+      <rect x="180" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="180" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_3$</div></foreignObject>
+
+      <text x="135" y="138" text-anchor="middle" font-size="11" fill="#5ec4c4">🚀 快！但可能不准</text>
+
+      <!-- Arrow to Step 2 -->
+      <line x1="260" y1="85" x2="290" y2="85" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+
+      <!-- Step 2: Verify -->
+      <rect x="295" y="20" width="230" height="130" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+      <text x="410" y="48" text-anchor="middle" font-size="14" fill="#2d8b8b" font-weight="700">Step 2: Verify（验证）</text>
+      <text x="410" y="68" text-anchor="middle" font-size="11" fill="#8faab0">大模型一次前向传播验证所有 K 个</text>
+
+      <rect x="315" y="82" width="60" height="28" rx="4" fill="#2d8b8b" opacity="0.3"/>
+      <text x="345" y="100" text-anchor="middle" font-size="12" fill="#f1faee">✓</text>
+      <rect x="385" y="82" width="60" height="28" rx="4" fill="#2d8b8b" opacity="0.3"/>
+      <text x="415" y="100" text-anchor="middle" font-size="12" fill="#f1faee">✓</text>
+      <rect x="455" y="82" width="60" height="28" rx="4" fill="#e09060" opacity="0.3" stroke="#e09060" stroke-width="1"/>
+      <text x="485" y="100" text-anchor="middle" font-size="12" fill="#e09060">✗</text>
+
+      <foreignObject x="315" y="127" width="190" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#2d8b8b;text-align:center;line-height:16px;">大模型一次验证 $=1$ 次前向传播</div></foreignObject>
+
+      <!-- Arrow to Step 3 -->
+      <line x1="535" y1="85" x2="565" y2="85" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+
+      <!-- Step 3: Result -->
+      <rect x="570" y="20" width="210" height="130" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="2"/>
+      <text x="675" y="48" text-anchor="middle" font-size="14" fill="#a8dadc" font-weight="700">Step 3: 输出</text>
+
+      <rect x="590" y="62" width="55" height="28" rx="4" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="590" y="62" width="55" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#1a2332;text-align:center;line-height:28px;font-weight:700;">$t_1$ ✓</div></foreignObject>
+      <rect x="655" y="62" width="55" height="28" rx="4" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="655" y="62" width="55" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#1a2332;text-align:center;line-height:28px;font-weight:700;">$t_2$ ✓</div></foreignObject>
+      <rect x="720" y="62" width="50" height="28" rx="4" fill="#e09060" stroke="none"/>
+      <text x="745" y="80" text-anchor="middle" font-size="12" fill="#1a2332" font-weight="700">重采</text>
+
+      <foreignObject x="600" y="102" width="150" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#a8dadc;text-align:center;line-height:22px;">$K=3$ 时接受 2 个 $=2\times$ 加速</div></foreignObject>
+      <text x="675" y="138" text-anchor="middle" font-size="11" fill="#8faab0">结果分布与大模型完全一致！</text>
+
+      <!-- Bottom analogy -->
+      <rect x="20" y="170" width="760" height="50" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+      <text x="400" y="192" text-anchor="middle" font-size="13" fill="#a8dadc">类比：实习生（小模型）写草稿 → 主管（大模型）一次审核 → 接受的留下，不接受的打回重写</text>
+      <text x="400" y="210" text-anchor="middle" font-size="12" fill="#8faab0">关键：主管只需看一遍（1 次前向传播），但可能一次性通过多个 token</text>
+
+      <!-- Variants -->
+      <rect x="20" y="235" width="760" height="65" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1" opacity="0.5"/>
+      <text x="400" y="258" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">变体</text>
+      <text x="160" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Medusa: 多头并行预测</text>
+      <text x="400" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Eagle: 特征级草拟</text>
+      <text x="640" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Self-Spec: 同模型不同层</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    首先介绍一种非常巧妙的加速方法——Speculative Decoding，投机解码。
+    <br><br>
+    核心想法用一个类比来理解：实习生写草稿，主管来审核。实习生相当于一个小模型，比如 $7\text{B}$，虽然不是那么准但生成速度很快。主管相当于大模型，比如 $70\text{B}$，虽然很准但每次推理很慢。
+    <br><br>
+    具体流程分三步，请看图。第一步 Draft，小模型快速生成 $K$ 个 token 作为草稿。第二步 Verify，大模型用一次前向传播同时验证这 $K$ 个 token。第三步输出，从左到右逐个检查，小模型猜对的就接受，猜错的就拒绝并重新采样。
+    <br><br>
+    图上的例子：$K=3$，小模型生成了 $t_1$、$t_2$、$t_3$ 三个 token。大模型验证后 $t_1$ 和 $t_2$ 通过了，$t_3$ 被拒绝。最终一次循环就产出了 $2$ 个有效 token，相当于 $2\times$ 加速。
+    <br><br>
+    最关键的性质是：最终输出的概率分布和大模型完全一致，不会有任何质量损失。这个等价性有严格的数学证明，下一页我们来看。
+  </aside>
+</section>
+
+<!-- P2-S3: Speculative Decoding 数学推导 -->
+<section data-part="2">
+  <h2>Speculative Decoding：为什么结果等价？</h2>
+  <div style="max-width:100%; margin:0 auto;">
+    <p>目标：证明用 Speculative Decoding 采样的 token 分布与直接从大模型 $p$ 采样<strong>完全一致</strong>。</p>
+
+    <div style="display:flex; gap:1em; margin-top:0.5em;">
+      <div style="flex:1;">
+        <div class="callout">
+          <div class="callout-title">接受概率</div>
+          <div class="math-block" style="margin:0.3em 0;">
+            $$p_{\text{accept}}(x) = \min\!\left(1,\; \frac{p(x)}{q(x)}\right)$$
+          </div>
+          <p style="font-size:0.85em; margin:0;">$p$ = 大模型概率，$q$ = 小模型概率<br>如果 $p(x) \geq q(x)$：必接受<br>如果 $p(x) < q(x)$：以 $p(x)/q(x)$ 的概率接受</p>
+        </div>
+      </div>
+      <div style="flex:1;">
+        <div class="callout">
+          <div class="callout-title">拒绝后重采样</div>
+          <div class="math-block" style="margin:0.3em 0;">
+            $$p_{\text{resample}}(x) = \frac{\max(0,\; p(x) - q(x))}{\sum_{x'} \max(0,\; p(x') - q(x'))}$$
+          </div>
+          <p style="font-size:0.85em; margin:0;">只从 $p > q$ 的区域重新采样<br>保证最终分布为 $p$</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:0.5em; text-align:center;">
+      <p style="font-size:0.9em;">最终采样分布：</p>
+      <div class="math-block">
+        $$P_{\text{final}}(x) = \underbrace{q(x) \cdot \min\!\left(1, \frac{p(x)}{q(x)}\right)}_{\text{被接受}} + \underbrace{\left(1 - \sum_{x'} q(x') \min\!\left(1, \frac{p(x')}{q(x')}\right)\right)}_{\text{拒绝概率}} \cdot \underbrace{p_{\text{resample}}(x)}_{\text{重采样}} = p(x) \;\checkmark$$
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:0.3em;">
+      <div class="callout-title">期望加速比</div>
+      <p style="margin:0; font-size:0.85em;">若小模型与大模型平均接受率 $\alpha$，draft 长度 $K$，则期望每步输出 token 数：$\frac{1}{1-\alpha}$ 倍</p>
+    </div>
+  </div>
+  <aside class="notes">
+    这一页我们证明 Speculative Decoding 的输出分布与大模型完全一致。
+    <br><br>
+    左边是接受概率的公式：$p_{\text{accept}}(x) = \min\!\left(1,\; \frac{p(x)}{q(x)}\right)$，其中 $p$ 是大模型的概率，$q$ 是小模型的概率。如果大模型认为这个 token 的概率大于等于小模型的概率，直接接受。如果小模型给出的概率过高，就以 $p(x)/q(x)$ 的概率接受。
+    <br><br>
+    右边是被拒绝后的重采样公式：只从大模型概率高于小模型的那些 token 中重新采样，权重是 $p(x) - q(x)$。
+    <br><br>
+    下面是完整的推导：最终采样分布等于被接受的部分加上被拒绝后重采样的部分。经过化简，最终结果恰好等于 $p(x)$，也就是大模型本身的分布。这就是为什么 Speculative Decoding 可以保证输出质量不变。
+    <br><br>
+    实践中，如果小模型和大模型比较接近，接受率 $\alpha$ 通常在 $0.8$ 到 $0.9$ 之间，这意味着 $3$ 到 $5$ 倍的加速。
+  </aside>
+</section>
+
+<!-- P2-S4: Speculative Decoding 加速比分析 -->
+<section data-part="2">
+  <h2>Speculative Decoding：加速比分析</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-spec-decode.png" alt="Speculative Decoding Speedup" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，基于理论加速比模型，$c{=}0.1$ 为小模型相对大模型的前向传播时间比）</p>
+    </div>
+    <div>
+      <ul style="font-size:0.88em;">
+        <li>加速比取决于 <span class="accent">接受率 $\alpha$</span> 和 <span class="accent">Draft 长度 $K$</span></li>
+        <li style="margin-top:0.5em;">$\alpha = 0.9,\ K = 5$ → <strong style="color:#5ec4c4;">~3× 加速</strong></li>
+        <li style="margin-top:0.5em;">$\alpha$ 越高（draft 越准确），加速越明显</li>
+        <li style="margin-top:0.5em;">$K$ 太大收益递减（$\alpha^k$ 快速衰减）</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <div class="callout-title">实践建议</div>
+        <p style="margin:0; font-size:0.85em;">
+          通常 $K \in [4, 7]$，选择与 target 同系列的 small draft model 可获得 $\alpha > 0.9$。<br>
+          关键约束：不改变输出分布（数学等价性保证）。
+        </p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    上一页证明了数学等价性，这页用图表展示实际加速效果。
+    <br><br>
+    横轴是草稿长度 $K$，纵轴是期望加速比，不同颜色的曲线代表不同的接受率 $\alpha$。可以看到，当接受率 $\alpha=0.9$、$K=5$ 时，能获得约 3 倍加速。但 $K$ 继续增大后收益递减，因为 $K$ 个 token 全部正确的概率是 $\alpha^K$，会快速衰减。
+    <br><br>
+    实践中的建议：$K$ 通常设为 $4$ 到 $7$，草稿模型选择与大模型同系列的小模型，这样可以获得 $0.9$ 以上的接受率。关键约束是不改变输出分布——这是由数学等价性保证的。
+    <br><br>
+    总结一下 Speculative Decoding：无损加速，原理简洁，效果显著。接下来我们看另一个优化方向——量化。
+  </aside>
+</section>
+
+<!-- P2-S5: 模型量化基础 (SVG) -->
+<section data-part="2">
+  <h2>模型量化 (Quantization)</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 240" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- FP16 number line -->
+          <text x="200" y="20" text-anchor="middle" font-size="14" fill="#2d8b8b" font-weight="700">FP16 (65536 个值)</text>
+          <line x1="30" y1="40" x2="370" y2="40" stroke="#a8dadc" stroke-width="2"/>
+          <!-- Dense dots -->
+          <g fill="#2d8b8b" opacity="0.7">
+            <circle cx="40" cy="40" r="2"/><circle cx="48" cy="40" r="2"/><circle cx="56" cy="40" r="2"/>
+            <circle cx="64" cy="40" r="2"/><circle cx="72" cy="40" r="2"/><circle cx="80" cy="40" r="2"/>
+            <circle cx="88" cy="40" r="2"/><circle cx="96" cy="40" r="2"/><circle cx="104" cy="40" r="2"/>
+            <circle cx="112" cy="40" r="2"/><circle cx="120" cy="40" r="2"/><circle cx="128" cy="40" r="2"/>
+            <circle cx="136" cy="40" r="2"/><circle cx="144" cy="40" r="2"/><circle cx="152" cy="40" r="2"/>
+            <circle cx="160" cy="40" r="2"/><circle cx="168" cy="40" r="2"/><circle cx="176" cy="40" r="2"/>
+            <circle cx="184" cy="40" r="2"/><circle cx="192" cy="40" r="2"/><circle cx="200" cy="40" r="2"/>
+            <circle cx="208" cy="40" r="2"/><circle cx="216" cy="40" r="2"/><circle cx="224" cy="40" r="2"/>
+            <circle cx="232" cy="40" r="2"/><circle cx="240" cy="40" r="2"/><circle cx="248" cy="40" r="2"/>
+            <circle cx="256" cy="40" r="2"/><circle cx="264" cy="40" r="2"/><circle cx="272" cy="40" r="2"/>
+            <circle cx="280" cy="40" r="2"/><circle cx="288" cy="40" r="2"/><circle cx="296" cy="40" r="2"/>
+            <circle cx="304" cy="40" r="2"/><circle cx="312" cy="40" r="2"/><circle cx="320" cy="40" r="2"/>
+            <circle cx="328" cy="40" r="2"/><circle cx="336" cy="40" r="2"/><circle cx="344" cy="40" r="2"/>
+            <circle cx="352" cy="40" r="2"/><circle cx="360" cy="40" r="2"/>
+          </g>
+          <text x="30" y="58" font-size="10" fill="#8faab0">-3.0</text>
+          <text x="185" y="58" font-size="10" fill="#8faab0">0</text>
+          <text x="355" y="58" font-size="10" fill="#8faab0">3.0</text>
+
+          <!-- Arrow -->
+          <path d="M200 75 L200 95" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+          <text x="230" y="90" font-size="11" fill="#a8dadc">量化</text>
+
+          <!-- INT4 number line -->
+          <text x="200" y="120" text-anchor="middle" font-size="14" fill="#e0b060" font-weight="700">INT4 (16 个值)</text>
+          <line x1="30" y1="140" x2="370" y2="140" stroke="#a8dadc" stroke-width="2"/>
+          <!-- Sparse dots -->
+          <g fill="#e0b060">
+            <circle cx="40" cy="140" r="4"/><circle cx="84" cy="140" r="4"/>
+            <circle cx="127" cy="140" r="4"/><circle cx="171" cy="140" r="4"/>
+            <circle cx="200" cy="140" r="5" stroke="#a8dadc" stroke-width="1"/>
+            <circle cx="229" cy="140" r="4"/><circle cx="273" cy="140" r="4"/>
+            <circle cx="316" cy="140" r="4"/><circle cx="360" cy="140" r="4"/>
+          </g>
+          <text x="30" y="158" font-size="10" fill="#8faab0">-8</text>
+          <text x="195" y="158" font-size="10" fill="#8faab0">0</text>
+          <text x="352" y="158" font-size="10" fill="#8faab0">7</text>
+
+          <!-- Formula -->
+          <rect x="40" y="175" width="320" height="35" rx="6" fill="#223044" stroke="#e0b060" stroke-width="1"/>
+          <foreignObject x="40" y="180" width="320" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e0b060;text-align:center;line-height:28px;">$x_q = \text{round}(x / s) + z$</div></foreignObject>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>用<strong>更少位数</strong>表示模型权重，牺牲少量精度换取：</p>
+      <ul style="font-size:0.88em;">
+        <li><span class="accent">减少显存</span>：$\text{FP16}\to\text{INT4}$，模型体积缩小 $4\times$</li>
+        <li><span class="accent">加速推理</span>：更小的数据 $\to$ 更少的访存</li>
+        <li><span class="accent">更大 batch</span>：省下的显存可服务更多请求</li>
+      </ul>
+      <table style="font-size:0.85em; margin-top:0.5em;">
+        <tr><th>精度</th><th>每参数字节</th><th>7B 模型大小</th><th>质量损失</th></tr>
+        <tr><td>FP16</td><td>2 B</td><td>14 GB</td><td>—</td></tr>
+        <tr><td>INT8</td><td>1 B</td><td>7 GB</td><td>极小</td></tr>
+        <tr><td>INT4</td><td>0.5 B</td><td>3.5 GB</td><td>小</td></tr>
+      </table>
+    </div>
+  </div>
+  <aside class="notes">
+    量化的核心思想很简单：用更少的位数来表示模型的权重。
+    <br><br>
+    请看左边的数轴对比。上面一行是 FP16，也就是半精度浮点数，可以表示 65536 个不同的值，点非常密集。下面一行是 INT4，只有 16 个不同的值，点非常稀疏。量化的过程就是把密集的浮点值映射到稀疏的离散值上，用公式表示就是 $x_q = \text{round}(x/s) + z$，其中 $s$ 是缩放因子，$z$ 是零点。
+    <br><br>
+    这就像把一张高清照片压缩成缩略图——肉眼看差别不大，但文件小了很多。
+    <br><br>
+    看右边的表格：FP16 时 LLaMA-2-7B 占 $14\,\text{GB}$，量化到 INT8 只要 $7\,\text{GB}$，INT4 只要 $3.5\,\text{GB}$，可以在消费级 GPU 上运行。量化带来的好处是三重的：减少显存占用、加速推理因为减少了访存量、以及省下的显存可以服务更多请求。质量损失通常很小，在 $1\%$ 到 $3\%$ 之间。
+  </aside>
+</section>
+
+<!-- P2-S6: GPTQ 量化原理 -->
+<section data-part="2">
+  <h2>GPTQ：逐层最优量化</h2>
+  <div class="two-column">
+    <div>
+      <p>问题：直接四舍五入会累积误差。GPTQ 的思路：</p>
+      <div class="math-block">
+        $$\hat{W}^* = \arg\min_{\hat{W}} \left\| WX - \hat{W}X \right\|_2^2$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>不是单独量化每个权重，而是考虑<strong>整层输出误差</strong></li>
+        <li>利用 <span class="accent">Hessian 矩阵</span> $H = 2XX^T$ 指导量化</li>
+        <li>逐列量化权重，同时调整未量化的列来补偿误差</li>
+        <li>只需少量校准数据（~128 条）</li>
+      </ul>
+      <div class="callout" style="margin-top:0.4em;">
+        <div class="callout-title">与简单量化对比</div>
+        <p style="margin:0; font-size:0.85em;">Simple RTN: round-to-nearest，忽略层间关系<br>GPTQ: 考虑权重间的相关性，量化后层输出更接近原始</p>
+      </div>
+    </div>
+    <div>
+      <div class="callout" style="border-left-color:#5ec4c4;">
+        <div class="callout-title" style="color:#5ec4c4;">其他量化方法</div>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>AWQ</strong> (Activation-aware): 基于激活值重要性保护关键权重通道</p>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>GGUF</strong>: 支持 CPU 推理的量化格式，可在笔记本上运行 LLM</p>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>SmoothQuant</strong>: 将激活值的量化难度迁移到权重上</p>
+      </div>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">实践建议</div>
+        <p style="margin:0; font-size:0.85em;">INT4 量化通常损失 &lt; 1% 精度<br>推荐：GPTQ/AWQ 用于 GPU，GGUF 用于 CPU</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    简单的四舍五入量化会累积误差，GPTQ 提出了更好的方案。
+    <br><br>
+    它的目标是最小化量化后整层输出的误差，公式在左边：寻找一个量化后的权重矩阵，使得它乘以 X 和原始权重乘以 X 尽可能接近。关键技巧是利用 Hessian 矩阵来指导量化——它告诉我们哪些权重对输出影响更大，需要更小心地量化。方法是逐列量化，每量化完一列，就调整还没量化的列来补偿误差。
+    <br><br>
+    实践中只需要 $128$ 条校准数据，量化后精度损失极小，不到 $1\%$。
+    <br><br>
+    右边列出了其他常见的量化方法：AWQ 基于激活值的重要性来保护关键通道；GGUF 支持 CPU 推理，可以在笔记本电脑上运行大模型；SmoothQuant 则是把激活值的量化难度迁移到权重上。总体建议是：GPU 推理用 GPTQ 或 AWQ，CPU 推理用 GGUF。
+  </aside>
+</section>
+
+<!-- P2-S7: Flash Attention (SVG) -->
+<section data-part="2">
+  <h2>Flash Attention：分块计算</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <!-- Standard Attention -->
+      <text x="195" y="22" text-anchor="middle" font-size="15" fill="#e09060" font-weight="700">Standard Attention</text>
+
+      <!-- Large N×N grid -->
+      <rect x="40" y="35" width="300" height="200" rx="4" fill="#223044" stroke="#e09060" stroke-width="2"/>
+      <!-- Grid lines -->
+      <g stroke="#3a4a5a" stroke-width="0.5" opacity="0.5">
+        <line x1="100" y1="35" x2="100" y2="235"/><line x1="160" y1="35" x2="160" y2="235"/>
+        <line x1="220" y1="35" x2="220" y2="235"/><line x1="280" y1="35" x2="280" y2="235"/>
+        <line x1="40" y1="75" x2="340" y2="75"/><line x1="40" y1="115" x2="340" y2="115"/>
+        <line x1="40" y1="155" x2="340" y2="155"/><line x1="40" y1="195" x2="340" y2="195"/>
+      </g>
+      <foreignObject x="130" y="130" width="120" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:22px;color:#e09060;text-align:center;line-height:28px;opacity:0.6;">$N \times N$</div></foreignObject>
+      <text x="190" y="175" text-anchor="middle" font-size="14" fill="#e09060">完整注意力矩阵</text>
+
+      <rect x="75" y="255" width="230" height="30" rx="6" fill="#223044" stroke="#e09060" stroke-width="1"/>
+      <foreignObject x="75" y="255" width="230" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">显存: $O(N^2)$ ❌</div></foreignObject>
+
+      <rect x="75" y="290" width="230" height="25" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1" opacity="0.5"/>
+      <foreignObject x="75" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ $256\text{M}$ 元素</div></foreignObject>
+
+      <!-- Arrow -->
+      <text x="395" y="140" text-anchor="middle" font-size="24" fill="#a8dadc">→</text>
+      <text x="395" y="165" text-anchor="middle" font-size="11" fill="#8faab0">Flash Attn</text>
+
+      <!-- Flash Attention -->
+      <text x="585" y="22" text-anchor="middle" font-size="15" fill="#5ec4c4" font-weight="700">Flash Attention</text>
+
+      <rect x="430" y="35" width="300" height="200" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <!-- Small tiled blocks -->
+      <g fill="#5ec4c4" opacity="0.25" stroke="#5ec4c4" stroke-width="1">
+        <rect x="440" y="45" width="55" height="45" rx="3"/>
+        <rect x="500" y="45" width="55" height="45" rx="3"/>
+        <rect x="440" y="95" width="55" height="45" rx="3"/>
+        <rect x="500" y="95" width="55" height="45" rx="3"/>
+        <rect x="600" y="45" width="55" height="45" rx="3"/>
+        <rect x="660" y="45" width="55" height="45" rx="3"/>
+        <rect x="600" y="95" width="55" height="45" rx="3"/>
+        <rect x="660" y="95" width="55" height="45" rx="3"/>
+        <rect x="440" y="160" width="55" height="45" rx="3"/>
+        <rect x="500" y="160" width="55" height="45" rx="3"/>
+        <rect x="440" y="210" width="55" height="20" rx="3"/>
+        <rect x="500" y="210" width="55" height="20" rx="3"/>
+        <rect x="600" y="160" width="55" height="45" rx="3"/>
+        <rect x="660" y="160" width="55" height="45" rx="3"/>
+        <rect x="600" y="210" width="55" height="20" rx="3"/>
+        <rect x="660" y="210" width="55" height="20" rx="3"/>
+      </g>
+      <text x="580" y="145" text-anchor="middle" font-size="16" fill="#5ec4c4" opacity="0.8">分块处理</text>
+      <text x="580" y="170" text-anchor="middle" font-size="12" fill="#5ec4c4">不存完整矩阵</text>
+
+      <rect x="465" y="255" width="230" height="30" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1"/>
+      <foreignObject x="465" y="255" width="230" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#5ec4c4;text-align:center;line-height:30px;">显存: $O(N)$ ✓</div></foreignObject>
+
+      <rect x="465" y="290" width="230" height="25" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1" opacity="0.5"/>
+      <foreignObject x="465" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ 仅几千元素</div></foreignObject>
+    </svg>
+  </div>
+  <aside class="notes">
+    接下来看一个系统层面的优化——Flash Attention。
+    <br><br>
+    标准 Attention 的显存瓶颈在哪里？在计算 softmax 时，要先算出一个 $N \times N$ 的完整注意力矩阵。$N=8192$ 时，这个矩阵有 $6700$ 万元素，单层单头就要 $128\,\text{MB}$。这显然不可持续。
+    <br><br>
+    Flash Attention 的创新在于分块计算。看右边的示意图：不再是完整的大矩阵，而是把 $Q$、$K$、$V$ 分成小块，在 GPU 的快速 SRAM 缓存里计算局部注意力，然后累积结果。关键是不需要把完整的 $N \times N$ 矩阵写回慢速的 HBM 显存。
+    <br><br>
+    数学结果和标准 Attention 完全一致，但显存从 $O(N^2)$ 降到了 $O(N)$。实际效果是在长序列推理时速度提升 $2$ 到 $4$ 倍，显存大幅减少。这是一个非常重要的优化，几乎所有现代 LLM 推理框架都默认使用 Flash Attention。
+  </aside>
+</section>
+
+<!-- P2-S8: PagedAttention & 分布式推理 (SVG) -->
+<section data-part="2">
+  <h2>PagedAttention &amp; 分布式推理</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- Traditional -->
+          <text x="95" y="18" text-anchor="middle" font-size="12" fill="#e09060" font-weight="700">传统分配</text>
+          <rect x="10" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#e09060" stroke-width="1.5"/>
+          <rect x="15" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="55" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="95" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="15" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="55" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="95" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="15" y="80" width="35" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="55" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <rect x="95" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <text x="160" y="95" font-size="10" fill="#e09060">碎片!</text>
+
+          <!-- Arrow -->
+          <text x="195" y="70" text-anchor="middle" font-size="16" fill="#a8dadc">→</text>
+
+          <!-- Paged -->
+          <text x="285" y="18" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">PagedAttention</text>
+          <rect x="200" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <rect x="205" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="240" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="275" y="30" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="310" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="205" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="240" y="55" width="30" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="275" y="55" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="310" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <text x="285" y="95" text-anchor="middle" font-size="10" fill="#5ec4c4">页表映射，无碎片</text>
+
+          <!-- Labels -->
+          <rect x="10" y="130" width="360" height="35" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+          <text x="190" y="152" text-anchor="middle" font-size="12" fill="#a8dadc">灵感来自操作系统虚拟内存分页机制</text>
+
+          <!-- Distributed -->
+          <rect x="10" y="180" width="360" height="70" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1" opacity="0.5"/>
+          <text x="190" y="200" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">超大模型的分布式推理</text>
+          <text x="190" y="220" text-anchor="middle" font-size="11" fill="#8faab0">Tensor Parallelism: 将每层的权重切分到多张 GPU</text>
+          <text x="190" y="238" text-anchor="middle" font-size="11" fill="#8faab0">Pipeline Parallelism: 将不同层放到不同 GPU</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p><span class="accent">PagedAttention</span> (vLLM):</p>
+      <ul style="font-size:0.88em;">
+        <li>KV Cache 分成固定大小的<strong>页/块</strong></li>
+        <li>像 OS 虚拟内存一样管理</li>
+        <li>消除显存碎片</li>
+        <li>支持 KV Cache 共享（prefix caching）</li>
+      </ul>
+      <p style="margin-top:0.6em;"><span class="accent">Tensor Parallelism</span>:</p>
+      <ul style="font-size:0.88em;">
+        <li>每层权重切分到多张 GPU</li>
+        <li>$70\text{B}$ 模型：$4\times$ A100 ($80\,\mathrm{GB}$)</li>
+        <li>通信开销：All-Reduce 操作</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    PagedAttention 是 vLLM 框架的核心创新，灵感来自操作系统的虚拟内存管理。
+    <br><br>
+    请看左边两张图的对比。上面是传统的 KV Cache 分配方式：给每个请求预分配一段连续的显存空间。问题是有些请求用不完预分配的空间，造成碎片浪费。下面是 PagedAttention 的做法：把 KV Cache 分成固定大小的块，像操作系统的内存页一样管理。不同请求的 KV Cache 可以不连续存储，通过一个页表来映射。这样就消除了碎片问题，显存利用率从大约 $60\%$ 提升到 $90\%$ 以上。
+    <br><br>
+    下方还提到了分布式推理。当模型大到单张 GPU 放不下时，比如 $70\text{B}$ 模型需要 $4$ 张 A100，有两种并行策略：Tensor Parallelism 是把每一层的权重切分到多张 GPU 上同时计算；Pipeline Parallelism 是把不同的层放到不同的 GPU 上流水线处理。通常两者结合使用。
+  </aside>
+</section>
+
+<!-- P2-S9: 技术全景总结 (PNG) -->
+<section data-part="2">
+  <h2>推理加速技术全景</h2>
+  <div class="img-center">
+    <img src="assets/p2-optimization-landscape.png" alt="推理加速技术全景图" style="max-height:65vh;">
+  </div>
+  <aside class="notes">
+    这张全景图总结了我们介绍的所有推理加速技术，分为四个方向。
+    <br><br>
+    第一，算法优化：核心就是 Speculative Decoding，用小模型帮大模型做投机执行。
+    <br><br>
+    第二，模型压缩：量化是最常用的手段，包括 GPTQ、AWQ 等方法。此外还有剪枝和蒸馏，今天没有展开。
+    <br><br>
+    第三，系统优化：Flash Attention 解决了 Attention 的显存瓶颈，PagedAttention 优化了 KV Cache 的管理，Continuous Batching 提升了服务吞吐量。
+    <br><br>
+    第四，硬件加速：通过 Tensor Parallelism 和 Pipeline Parallelism 实现多 GPU 分布式推理。
+    <br><br>
+    这些技术通常组合使用。比如 INT4 量化加上 Flash Attention 再加上 Speculative Decoding，可以获得累积的加速效果。
+  </aside>
+</section>
+
+<!-- P2-S10: 小结 -->
+<section data-part="2">
+  <h2>Part 2 小结</h2>
+  <div style="display:flex; gap:1.2em;">
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">加速思路</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>Speculative Decoding: 小模型帮大模型</li>
+          <li>量化: 更低位数 $=$ 更少访存</li>
+          <li>Flash Attention: 分块避免 $O(N^2)$</li>
+          <li>PagedAttention: 分页管理 KV Cache</li>
+        </ul>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-seafoam);">
+        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">核心原则</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>推理瓶颈在 <strong>内存带宽</strong></li>
+          <li>所有优化都在减少访存</li>
+          <li>或提高访存效率</li>
+          <li>结果不变（等价性证明）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1.2em; text-align:center;">
+    <p style="margin:0; font-size:1.15em;">单次推理变快后，<span class="accent">能否用更多推理计算提升效果</span>？ → <strong>Part 3</strong></p>
+  </div>
+  <aside class="notes">
+    Part 2 到此结束。我们学习了四项加速技术：Speculative Decoding 用小模型帮大模型，量化用更少位数减少访存，Flash Attention 分块计算避免 $O(N^2)$ 显存，PagedAttention 分页管理 KV Cache。
+    <br><br>
+    核心原则只有一个：推理的瓶颈在内存带宽，所有优化本质上都是在减少访存或提高访存效率。
+    <br><br>
+    前面我们一直在讲如何让单次推理更快。但换个角度想：如果单次推理已经很快了，我们能不能通过多次推理、花更多计算来获得更好的结果呢？这就是 Part 3 的主题——Inference-Time Scaling。请 Y 同学来接力。
+  </aside>
+</section>
+
+
+      <!-- ═══════════════════════════════════════════════════════════
+           Part 3: Inference-Time Scaling
+           ═══════════════════════════════════════════════════════════ -->
+      <section data-part="3" class="section-slide">
+        <div class="section-number">03</div>
+        <h2>Inference-Time Scaling</h2>
+        <div class="dim">用更多推理计算换更好结果</div>
+        <aside class="notes">
+          Part 2 结束，过渡到 Part 3。主讲人 C 接力。
+          过渡语：单次推理变快后，能否用更多推理计算提升效果？
+        </aside>
+      </section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Part 3: Inference-Time Scaling
+     主讲人 C · ~15 min · 10 slides
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- P3-S1: 核心思想 (PNG 大图) -->
+<section data-part="3">
+  <h2>两种 Scaling 范式</h2>
+  <div class="img-center">
+    <img src="assets/p3-two-scaling.png" alt="Training Scaling vs Inference Scaling" style="max-height:55vh;">
+  </div>
+  <div class="callout" style="text-align:center; margin-top:0.3em;">
+    <p style="margin:0; font-size:0.92em;">训练 Scaling（更大模型）vs 推理 Scaling（更多思考）— 两种提升性能的方式</p>
+  </div>
+  <aside class="notes">
+    大家好。前两部分我们关注的是如何让推理更快。现在换一个视角：如果我们愿意在推理时花费更多的计算，能否得到更好的结果？这就是 Inference-Time Scaling 的核心思想。
+    <br><br>
+    请看这张对比图。左边是训练时的 Scaling：用更大的模型、更多的数据、更多的训练算力，来让模型变得更强。这是我们比较熟悉的方式。右边是推理时的 Scaling：保持模型不变，但在推理时使用更多的计算。比如让模型思考更多步、采样更多次、做更深入的搜索。
+    <br><br>
+    打个比方：训练 Scaling 相当于让学生学更多年、读更多书；推理 Scaling 相当于考试时让学生想得更久。两者都能提升表现，但成本和方式不同。
+    <br><br>
+    今天这个第三部分，我们就来探讨推理 Scaling 的各种技术。
+  </aside>
+</section>
+
+<!-- P3-S2: Chain-of-Thought (HTML/CSS 文字排版) -->
+<section data-part="3">
+  <h2>Chain-of-Thought (CoT)</h2>
+  <div style="display:flex; gap:1.2em; margin-top:0.3em;">
+    <!-- Without CoT -->
+    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #e09060;">
+      <div style="color:#e09060; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">❌ 直接回答</div>
+      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
+        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> 一个餐厅有 23 张桌子。每张桌子有 4 把椅子。今天午餐时有 14 张桌子坐了 3 人，5 张桌子坐了 4 人，其余空着。餐厅里有多少人？</p>
+        <p style="margin:0.5em 0 0; color:#e09060;"><strong>A:</strong> 62 人</p>
+        <p style="margin:0.2em 0 0; color:#8faab0; font-size:0.88em;">（一步跳到答案，容易出错）</p>
+      </div>
+    </div>
+    <!-- With CoT -->
+    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #5ec4c4;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">✅ 分步推理 (CoT)</div>
+      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
+        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> （同上）</p>
+        <p style="margin:0.4em 0 0;"><strong style="color:#5ec4c4;">A:</strong> 让我一步步来：</p>
+        <p style="margin:0.2em 0 0; padding-left:0.8em;">1) $14 \times 3 = 42$ 人</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">2) $5 \times 4 = 20$ 人</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">3) 其余 $23-14-5=4$ 张桌子空着</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">4) 总人数 $=42+20=62$ 人</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    最简单的推理 Scaling 方法就是 Chain-of-Thought，也就是思维链。
+    <br><br>
+    请看屏幕上的对比。左边是直接回答：模型看到问题后，一步就给出答案 62 人。问题是，模型要在"脑子里"一步完成所有计算，很容易出错。
+    <br><br>
+    右边是使用 CoT 的方式：模型说"让我一步步来"，然后一步步列出计算过程——14 乘以 3 等于 42 人，5 乘以 4 等于 20 人，剩下 4 张桌子空着，总共 42 加 20 等于 62 人。
+    <br><br>
+    两种方式得到的答案一样，但 CoT 的每一步都很简单，不容易出错。而没有 CoT 时，模型需要一步映射，中间任何计算错误都无法纠正。
+    <br><br>
+    CoT 的关键洞察是：将一个复杂问题分解成多个简单步骤。每步只消耗少量推理计算，但总计算量增加了。这就是"用更多推理计算换更好结果"的最简单形式。
+  </aside>
+</section>
+
+<!-- P3-S3: CoT 为什么有效 -->
+<section data-part="3">
+  <h2>CoT 为什么有效？— 数学直觉</h2>
+  <div class="two-column">
+    <div>
+      <p>直接回答 vs 分步推理：</p>
+      <div class="math-block">
+        $$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>$q$ = 问题，$a$ = 答案，$c$ = 中间推理步骤</li>
+        <li>直接回答需要模型<span class="accent">一步</span>映射 $q \to a$</li>
+        <li>CoT 引入中间变量 $c$，将一步分解为<span class="accent">多步</span></li>
+        <li>每步更简单 $\to$ 出错概率更低</li>
+      </ul>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">Circuit Complexity 视角</div>
+        <p style="margin:0; font-size:0.85em;">CoT 等价于增加神经网络的"计算深度"。更深的网络能表达更复杂的函数。每个推理步骤 $\approx$ 网络多一层。</p>
+      </div>
+    </div>
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah-p3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- Direct -->
+          <rect x="20" y="30" width="80" height="40" rx="6" class="box"/>
+          <foreignObject x="20" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
+          <line x1="100" y1="50" x2="130" y2="50" stroke="#e09060" stroke-width="3" marker-end="url(#ah-p3)"/>
+          <text x="115" y="40" text-anchor="middle" font-size="10" fill="#e09060">1步</text>
+          <rect x="135" y="30" width="80" height="40" rx="6" fill="#223044" stroke="#e09060" stroke-width="2"/>
+          <foreignObject x="135" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">Answer $a$</div></foreignObject>
+          <foreignObject x="120" y="80" width="110" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#e09060;text-align:center;line-height:16px;">深度 $=1$ 层</div></foreignObject>
+
+          <!-- CoT -->
+          <rect x="20" y="120" width="80" height="40" rx="6" class="box"/>
+          <foreignObject x="20" y="125" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
+          <line x1="100" y1="140" x2="130" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="135" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <foreignObject x="135" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_1$</div></foreignObject>
+          <line x1="205" y1="140" x2="225" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="230" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <foreignObject x="230" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_2$</div></foreignObject>
+          <line x1="265" y1="160" x2="265" y2="180" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="230" y="185" width="70" height="30" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="265" y="205" text-anchor="middle" font-size="12" fill="#2d8b8b">...</text>
+          <line x1="230" y1="200" x2="200" y2="200" stroke="#2d8b8b" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="110" y="185" width="90" height="30" rx="6" fill="#2d8b8b" stroke="none"/>
+          <foreignObject x="110" y="190" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:24px;font-weight:700;">Answer $a$</div></foreignObject>
+
+          <foreignObject x="110" y="222" width="130" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#5ec4c4;text-align:center;line-height:20px;">深度 $=T$ 层（$T$步推理）</div></foreignObject>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    CoT 为什么有效？我们可以从数学角度来理解。
+    <br><br>
+    请看左边这个公式。$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$，直接回答时，模型要一步从问题 $q$ 映射到答案 $a$，这是一个很复杂的函数。引入 CoT 后，我们把这个映射分解为多步：$q \to c_1 \to c_2 \to \cdots \to a$。每一步都是一个更简单的函数，出错的概率更低。
+    <br><br>
+    右边用图来直观展示。上面一行是直接回答，只有一层"网络深度"。下面一行是 CoT，有多步推理，相当于网络有 $T$ 层。
+    <br><br>
+    这就引出了 Circuit Complexity 的视角：CoT 本质上增加了神经网络的"计算深度"。理论上有一些问题，浅层网络需要指数级的宽度才能解决，但深层网络可以高效处理。CoT 让模型在推理时获得了额外的深度，这就是 Inference-Time Compute 的本质。
+  </aside>
+</section>
+
+<!-- P3-S4: Self-Consistency (SVG) -->
+<section data-part="3">
+  <h2>Self-Consistency：多次采样 + 多数投票</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 800 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <defs>
+        <marker id="ah-sc" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+
+      <!-- Question -->
+      <rect x="250" y="10" width="300" height="40" rx="8" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="250" y="10" width="300" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#1a2332;text-align:center;line-height:30px;font-weight:700;">同一个问题，采样 $N\!=\!5$ 次</div></foreignObject>
+
+      <!-- 5 paths -->
+      <!-- Path 1 -->
+      <line x1="310" y1="50" x2="100" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="30" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="100" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 1</text>
+      <text x="100" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 2 -->
+      <line x1="350" y1="50" x2="250" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="180" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="250" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 2</text>
+      <text x="250" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 3 -->
+      <line x1="400" y1="50" x2="400" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="330" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="400" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 3</text>
+      <text x="400" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 58</text>
+
+      <!-- Path 4 -->
+      <line x1="450" y1="50" x2="550" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="480" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="550" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 4</text>
+      <text x="550" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 5 -->
+      <line x1="490" y1="50" x2="700" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="630" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="700" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 5</text>
+      <text x="700" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 65</text>
+
+      <!-- Arrows to vote -->
+      <line x1="100" y1="150" x2="300" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="250" y1="150" x2="320" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="400" y1="150" x2="400" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="550" y1="150" x2="480" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="700" y1="150" x2="500" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
+
+      <!-- Vote box -->
+      <rect x="230" y="200" width="340" height="50" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
+      <text x="400" y="220" text-anchor="middle" font-size="13" fill="#a8dadc">多数投票 (Majority Vote)</text>
+      <text x="400" y="240" text-anchor="middle" font-size="14" fill="#a8dadc">62: <tspan fill="#5ec4c4" font-weight="700">3票</tspan> · 58: <tspan fill="#e09060">1票</tspan> · 65: <tspan fill="#e09060">1票</tspan></text>
+
+      <!-- Result -->
+      <line x1="400" y1="250" x2="400" y2="275" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-sc)"/>
+      <rect x="325" y="280" width="150" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
+      <text x="400" y="302" text-anchor="middle" font-size="15" fill="#1a2332" font-weight="700">最终答案: 62 ✓</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    CoT 是一条推理路径。Self-Consistency 是它的自然延伸：不只做一次推理，而是采样多次。
+    <br><br>
+    请看这张图。同一个问题，我们采样 $N=5$ 次。每次走不同的推理路径，得到不同的答案。路径 1 得到 62，路径 2 得到 62，路径 3 得到 58，路径 4 得到 62，路径 5 得到 65。然后做多数投票：62 有 3 票，58 有 1 票，65 有 1 票。最终选择 62 作为答案。
+    <br><br>
+    背后的直觉是：正确的推理路径可能各不相同，但更可能殊途同归，得到同一个正确答案。而错误的路径则是随机分散的，不太可能凑到同一个错误答案上。
+    <br><br>
+    计算开销是 $5$ 次推理，等于 $5\times$ 的计算量，但准确率显著提升。这就是 Inference-Time Scaling 的典型例子：花更多计算换取更好的结果。
+  </aside>
+</section>
+
+<!-- P3-S5: Self-Consistency 投票效果分析 -->
+<section data-part="3">
+  <h2>Self-Consistency：投票效果分析</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-self-consistency-voting.png" alt="Self-Consistency 投票效果" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，基于二项分布模型。$p{=}0.57$ 参考 LLaMA-2-70B 在 GSM8K 上的 8-shot CoT 表现，Touvron et al. 2023）</p>
+    </div>
+    <div>
+      <ul style="font-size:0.88em;">
+        <li>单次推理准确率 $p = 57\%$（LLaMA-2-70B, GSM8K）</li>
+        <li style="margin-top:0.5em;">$N=5$: $\sim 63\%$ &nbsp; $N=11$: $\sim 68\%$</li>
+        <li style="margin-top:0.3em;">$N=21$: $\sim 74\%$ &nbsp; $N=41$: $\sim 82\%$</li>
+        <li style="margin-top:0.5em;"><strong style="color:#5ec4c4;">边际收益递减</strong>，但持续提升</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <div class="callout-title">Inference-Time Scaling 的核心直觉</div>
+        <p style="margin:0; font-size:0.85em;">
+          更多采样 $\times$ 投票 = 更可靠答案。<br>
+          计算量翻倍 → 准确率持续提升，但存在收益递减。
+        </p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    上一页展示了 Self-Consistency 的原理，这页用量化数据来看投票效果。
+    <br><br>
+    以 LLaMA-2-70B 在 GSM8K 数学推理基准上的表现为例，单次推理准确率是 $57\%$。通过多数投票，$N=5$ 时准确率提升到约 $63\%$，$N=11$ 约 $68\%$，$N=21$ 约 $74\%$，$N=41$ 约 $82\%$。
+    <br><br>
+    但注意边际收益递减：从 $1$ 次到 $11$ 次提升了 $11$ 个百分点，从 $11$ 次到 $41$ 次只提升 $14$ 个百分点，而计算量增加了近 $3$ 倍。
+    <br><br>
+    还有一个重要前提：多数投票要求单次准确率 $p > 0.5$ 才有效。这来自 Condorcet 陪审团定理——如果每个"投票者"正确的概率超过 $1/2$，投票者越多，最终正确的概率就越高。反之如果单次准确率 $p < 0.5$，投票反而会更差。
+    <br><br>
+    总的来说，更多采样加投票等于更可靠的答案，但存在收益递减，需要权衡计算成本。
+  </aside>
+</section>
+
+<!-- P3-S6: Best-of-N & Process Reward Model (SVG) -->
+<section data-part="3">
+  <h2>Best-of-N &amp; Process Reward Model</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 440 280" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah-bon" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- N solutions -->
+          <rect x="10" y="10" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="28" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 1</text>
+          <rect x="10" y="42" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="50" y="60" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 2</text>
+          <rect x="10" y="74" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="92" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 3</text>
+          <rect x="10" y="106" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="50" y="124" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 4</text>
+          <rect x="10" y="138" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="156" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 5</text>
+
+          <!-- Arrow to Verifier -->
+          <line x1="95" y1="90" x2="140" y2="90" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+
+          <!-- Verifier box -->
+          <rect x="145" y="55" width="100" height="70" rx="8" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+          <text x="195" y="78" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">Verifier</text>
+          <text x="195" y="95" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">/ RM</text>
+          <text x="195" y="115" text-anchor="middle" font-size="10" fill="#8faab0">评分 &amp; 排序</text>
+
+          <!-- Scores -->
+          <line x1="245" y1="70" x2="280" y2="30" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="30" font-size="11" fill="#8faab0">0.3</text>
+          <line x1="245" y1="80" x2="280" y2="60" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="60" font-size="11" fill="#8faab0">0.7</text>
+          <line x1="245" y1="95" x2="280" y2="100" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <text x="310" y="100" font-size="12" fill="#5ec4c4" font-weight="700">0.9 ★</text>
+          <line x1="245" y1="105" x2="280" y2="140" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="140" font-size="11" fill="#8faab0">0.4</text>
+          <line x1="245" y1="115" x2="280" y2="170" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="170" font-size="11" fill="#8faab0">0.6</text>
+
+          <!-- Best -->
+          <line x1="290" y1="100" x2="290" y2="220" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <rect x="230" y="225" width="130" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
+          <text x="295" y="247" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">选最高分 ✓</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>Best-of-N：</p>
+      <ul style="font-size:0.88em;">
+        <li>生成 N 个候选解法</li>
+        <li>用 Reward Model 打分</li>
+        <li>选分数最高的</li>
+      </ul>
+      <div class="math-block">
+        $$E[\text{quality}] = E\!\left[\max_{i=1}^{N} f(x_i)\right]$$
+      </div>
+      <p style="margin-top:0.5em;"><span class="accent">Process Reward Model (PRM)</span>:</p>
+      <ul style="font-size:0.88em;">
+        <li>不只评估最终答案</li>
+        <li>评估<strong>每一步推理</strong>的质量</li>
+        <li>可以定位出错的步骤</li>
+        <li>OpenAI o1 的核心技术之一</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    Best-of-N 是一种更通用的"多采选优"方法。
+    <br><br>
+    看左边的流程图。生成 $5$ 个候选解法，然后交给一个 Verifier 或者 Reward Model 来打分，最后选分数最高的那个。数学上，期望的最优质量会随 $N$ 的增长而增长，当然收益也是递减的。
+    <br><br>
+    但更精细的方法是 Process Reward Model，简称 PRM。普通的 Verifier 只看最终答案对不对，而 PRM 评估推理过程中每一步的质量。它可以定位到具体哪一步出了错，从而指导搜索算法在正确的方向上探索。
+    <br><br>
+    PRM 是 OpenAI o1 模型的核心技术之一。通过评估每一步的推理质量，模型可以在思考过程中自我纠错，避免在一个错误的方向上越走越远。
+  </aside>
+</section>
+
+<!-- P3-S7: Tree of Thoughts & MCTS (PNG) -->
+<section data-part="3">
+  <h2>Tree of Thoughts &amp; MCTS</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/p3-tot-mcts.png" alt="Tree of Thoughts / MCTS" style="max-height:50vh;" class="plain">
+      </div>
+    </div>
+    <div>
+      <p>从<strong>线性思考</strong>到<strong>树状搜索</strong>：</p>
+      <ul style="font-size:0.88em;">
+        <li>CoT: 一条推理路径</li>
+        <li>ToT: 多条分支 + 回溯</li>
+        <li>MCTS: AlphaGo 式搜索</li>
+      </ul>
+      <div class="math-block">
+        $$\text{UCB} = \bar{X}_j + c\sqrt{\frac{\ln N}{n_j}}$$
+      </div>
+      <ul style="font-size:0.85em;">
+        <li>$\bar{X}_j$ = 节点 $j$ 的平均奖励</li>
+        <li>$N$ = 父节点访问次数</li>
+        <li>$n_j$ = 节点 $j$ 的访问次数</li>
+        <li>$c$ = 探索-利用平衡系数</li>
+      </ul>
+      <div class="callout" style="margin-top:0.3em;">
+        <p style="margin:0; font-size:0.85em;">UCB 保证：<span class="accent">探索</span>未知路径 + <span class="accent">利用</span>已知好路径</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Tree of Thoughts 将推理从线性的 CoT 升级为树状搜索。
+    <br><br>
+    CoT 是一条路走到黑。Tree of Thoughts 允许在每一步分支出多个候选思路，评估后选择最有希望的继续探索，不行的就回溯。MCTS，也就是蒙特卡洛树搜索，来自 AlphaGo，核心用 UCB 公式来平衡探索和利用。
+    <br><br>
+    大家看这个 UCB 公式。$\bar{X}_j$ 是节点 $j$ 的平均奖励，越高说明这条路越好。但后面这一项中，大 $N$ 是父节点的访问次数，小 $n_j$ 是当前节点的访问次数。如果一个节点被访问得很少，这一项就会很大，给它更多被选择的机会。这就是"探索"——避免错过潜在的好路径。
+    <br><br>
+    实际效果是：在数学推理、编程等复杂任务上，Tree of Thoughts 显著优于简单的 CoT，因为复杂问题往往需要试错和回溯。
+  </aside>
+</section>
+
+<!-- P3-S8: OpenAI o1/o3 -->
+<section data-part="3">
+  <h2>OpenAI o1/o3：Test-Time Compute 的工业实践</h2>
+  <div style="display:flex; gap:1.2em;">
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-seafoam);">
+        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">o1 的核心思路</div>
+        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
+          <li>训练模型"学会思考"（强化学习训练推理策略）</li>
+          <li>推理时自动进行多步推理 + 自我验证</li>
+          <li>内置 hidden CoT（思考过程对用户不可见）</li>
+          <li>在数学/编程/科学推理上大幅超越 GPT-4</li>
+        </ul>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">关键洞察</div>
+        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
+          <li>不是让模型更大，而是让模型<strong>思考更久</strong></li>
+          <li>推理计算量可动态调整（简单问题少想，难题多想）</li>
+          <li>o3 在 ARC-AGI 基准上达到人类水平</li>
+          <li>验证了 inference-time scaling 的有效性</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1em; text-align:center;">
+    <p style="margin:0; font-size:1.05em;">o1/o3 证明：<span class="accent">推理时的计算扩展</span>是提升 LLM 能力的新维度，与模型规模扩展互补。</p>
+  </div>
+  <aside class="notes">
+    OpenAI 的 o1 和 o3 模型是 Inference-Time Scaling 最著名的工业实践。
+    <br><br>
+    左栏总结了 o1 的核心思路。它用强化学习训练模型"学会思考"——也就是自动进行多步推理、自我验证和纠错。推理时，模型会先生成一段 Hidden Chain of Thought，对用户不可见，然后给出最终答案。
+    <br><br>
+    右栏的关键洞察是：o1 不是让模型更大，而是让模型思考更久。推理计算量可以动态调整——简单问题少想一会儿，难题多想一会儿。o3 在 ARC-AGI 基准测试上达到了人类水平，这个测试被认为是通用人工智能的门槛测试之一。
+    <br><br>
+    这验证了 Inference-Time Scaling 的有效性：不一定要更大的模型，让模型思考更久也能达到更好的效果。
+  </aside>
+</section>
+
+<!-- P3-S9: Inference Scaling Laws (图表) -->
+<section data-part="3">
+  <h2>Inference Scaling Laws</h2>
+  <div class="two-column">
+    <div>
+      <p>核心发现：</p>
+      <div class="math-block">
+        $$\text{Performance} \propto \log(\text{Inference FLOPs})$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>推理计算量与性能呈<span class="accent">对数线性关系</span></li>
+        <li>与训练 scaling law 形式类似（$\text{Loss} \propto \log(\text{Compute})$）</li>
+        <li><strong>小模型 + 更多推理计算</strong> 可以匹配大模型的性能</li>
+        <li>存在"计算最优"的分配策略</li>
+      </ul>
+      <div class="callout" style="margin-top:0.4em;">
+        <div class="callout-title">实践意义</div>
+        <p style="margin:0; font-size:0.85em;">不一定需要训练更大的模型。对于单个困难问题，增加推理计算（更多采样、搜索）可以显著提升准确率。</p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-scaling-law.png" alt="Inference Scaling Law" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（定性示意图，趋势参考 Snell et al. "Scaling LLM Test-Time Compute" 2024，具体数值为模拟）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    最后来看 Inference Scaling Laws。
+    <br><br>
+    核心发现是：推理计算量与模型性能呈对数线性关系，形式上和训练时的 Scaling Law 非常类似。看右边的图：横轴是推理计算量的对数，纵轴是准确率，基本上是一条直线。
+    <br><br>
+    更有趣的发现是：一个 $7\text{B}$ 的小模型，如果分配更多的推理计算，比如 $64$ 次采样加验证，可以达到 $70\text{B}$ 大模型单次推理的性能。这意味着：对于单个困难问题，用小模型多算几次可能比用大模型算一次更划算——更快也更省资源。
+    <br><br>
+    当然，这也提示了一个计算最优的分配问题：给定固定的总预算，应该花多少在训练上、多少在推理上？这是一个活跃的研究方向。
+  </aside>
+</section>
+
+<!-- P3-S10: 全课总结 & Q&A (PNG) -->
+<section data-part="3">
+  <h2>全课总结</h2>
+  <div class="img-center">
+    <img src="assets/p3-summary.png" alt="课程总结" style="max-height:48vh;">
+  </div>
+  <div style="margin-top:0.6em; font-size:0.95em;">
+    <p style="margin:0.4em 0;">Part 1: 推理基础 — <span class="accent">理解</span>推理流程和瓶颈 (Transformer, 自回归, KV Cache)</p>
+    <p style="margin:0.4em 0;">Part 2: 推理加速 — <span class="accent">优化</span>推理效率 (Speculative Decoding, 量化, Flash Attention)</p>
+    <p style="margin:0.4em 0;">Part 3: 推理扩展 — <span class="accent">扩展</span>推理计算 (CoT, Self-Consistency, MCTS, Scaling Laws)</p>
+  </div>
+  <div style="margin-top:0.8em; text-align:center;">
+    <p style="font-size:0.9em; color:var(--ocean-mist);">Q&A 欢迎提问</p>
+  </div>
+  <aside class="notes">
+    到这里我们全部三部分的内容就讲完了，来做一个全课总结。
+    <br><br>
+    Part 1：我们理解了 Transformer 推理的基本流程——自回归生成、KV Cache、以及推理瓶颈分析。
+    <br><br>
+    Part 2：学习了加速推理的关键技术——Speculative Decoding、量化、Flash Attention、PagedAttention。
+    <br><br>
+    Part 3：探索了推理时扩展的新范式——CoT、Self-Consistency、Tree of Thoughts、MCTS，以及 Inference Scaling Laws。
+    <br><br>
+    核心信息是：大语言模型的推理不仅是一个工程问题。通过投入更多推理计算，可以显著提升输出质量。这是 LLM 发展的一个新方向。
+    <br><br>
+    以上就是今天的全部内容，参考文献见附录。现在进入 Q&A 环节，欢迎大家提问。
+  </aside>
+</section>
+
+
+    </div> <!-- .slides -->
+  </div> <!-- .reveal -->
+
+  <!-- Reveal.js Core JS -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+
+  <!-- Reveal.js Plugins -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/math/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/notes/notes.js"></script>
+
+  <!-- KaTeX -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <script>
+    // Mark reveal.js receiver iframes (used by speaker notes previews)
+    // so responsive rules can avoid mobile-style restacking there.
+    if (/(?:^|[?&])receiver(?:[=&]|$)/i.test(window.location.search)) {
+      document.documentElement.classList.add('receiver-mode');
+    }
+
+    Reveal.initialize({
+      width: 1280,
+      height: 720,
+      margin: 0.06,
+      minScale: 0.2,
+      maxScale: 2.0,
+      transition: 'fade',
+      transitionSpeed: 'default',
+      backgroundTransition: 'fade',
+      hash: true,
+      history: true,
+      center: true,
+      controls: true,
+      progress: true,
+      slideNumber: 'c/t',
+      plugins: [
+        RevealMath.KaTeX,
+        RevealHighlight,
+        RevealNotes
+      ],
+      math: {
+        katexScript: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+        config: 'default'
+      },
+      keyboard: true
+    });
+
+    // === KaTeX rendering in speaker notes popup ===
+    // Keep this strictly scoped to notes math rendering.
+    // Do NOT inject deck/theme CSS into the speaker popup or its iframes:
+    // reveal-notes already loads slide previews from the same URL, and extra
+    // global CSS injection can break popup layout and preview alignment.
+    (function() {
+      var KATEX_BASE = 'https://cdn.jsdelivr.net/npm/katex@0.16.9';
+      var NOTES_SELECTOR = '.speaker-controls-notes .value';
+      var _injected = false;
+
+      var KATEX_CONFIG = {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\(', right: '\\)', display: false},
+          {left: '\\[', right: '\\]', display: true}
+        ],
+        throwOnError: false
+      };
+
+      function renderNotes(doc) {
+        var el = doc.querySelector(NOTES_SELECTOR);
+        if (!el || el.querySelector('.katex')) return;
+        var win = doc.defaultView;
+        if (!win || !win.renderMathInElement) return;
+        win.renderMathInElement(el, KATEX_CONFIG);
+      }
+
+      function setupObserver(doc) {
+        var el = doc.querySelector(NOTES_SELECTOR);
+        if (!el) return;
+        renderNotes(doc);
+        try {
+          var observer = new doc.defaultView.MutationObserver(function() {
+            setTimeout(function() { renderNotes(doc); }, 50);
+          });
+          observer.observe(el, { childList: true, subtree: true, characterData: true });
+        } catch(e) {}
+      }
+
+      function injectKatex(popup) {
+        if (_injected || !popup || popup.closed) return;
+        var doc;
+        try {
+          doc = popup.document;
+        } catch(e) {
+          return;
+        }
+        if (!doc || !doc.head) return;
+
+        _injected = true;
+
+        // KaTeX CSS (needed for already-rendered KaTeX HTML from main document)
+        if (!doc.querySelector('link[data-katex-notes="1"]')) {
+          var link = doc.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = KATEX_BASE + '/dist/katex.min.css';
+          link.setAttribute('data-katex-notes', '1');
+          doc.head.appendChild(link);
+        }
+
+        // If scripts are already available in the popup, just observe and render.
+        var win = doc.defaultView;
+        if (win && win.katex && win.renderMathInElement) {
+          setupObserver(doc);
+          return;
+        }
+
+        // KaTeX JS + auto-render (fallback for unrendered notes)
+        var s1 = doc.createElement('script');
+        s1.src = KATEX_BASE + '/dist/katex.min.js';
+        s1.onload = function() {
+          var s2 = doc.createElement('script');
+          s2.src = KATEX_BASE + '/dist/contrib/auto-render.min.js';
+          s2.onload = function() { setupObserver(doc); };
+          doc.head.appendChild(s2);
+        };
+        doc.head.appendChild(s1);
+      }
+
+      // Detect popup via postMessage — no window.open monkey-patch needed.
+      // The popup sends 'connected' when it's ready, and 'state' on slide changes.
+      // event.source gives us the popup window reference.
+      window.addEventListener('message', function(event) {
+        try {
+          var data = JSON.parse(event.data);
+          if (data && data.namespace === 'reveal-notes') {
+            if (data.type === 'connected' || data.type === 'state') {
+              injectKatex(event.source);
+            }
+          }
+        } catch(e) {}
+      });
+    })();
+  </script>
+
+</body>
+</html>

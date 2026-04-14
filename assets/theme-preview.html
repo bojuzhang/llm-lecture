@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Theme Preview - 主题对比预览</title>
+<style>
+body { margin: 0; padding: 20px; background: #111; color: #fff; font-family: sans-serif; }
+h1 { text-align: center; margin-bottom: 30px; }
+.themes { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.theme-card {
+  width: 380px; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.theme-header {
+  padding: 24px 20px 16px; position: relative;
+}
+.theme-header h2 { margin: 0 0 4px; font-size: 22px; }
+.theme-header p { margin: 0; opacity: 0.7; font-size: 13px; }
+.colors { display: flex; height: 60px; }
+.color { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; }
+.sample {
+  padding: 20px;
+  min-height: 260px;
+}
+.sample h3 { margin: 0 0 8px; font-size: 18px; }
+.sample p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.sample .code-block {
+  padding: 10px 14px; border-radius: 6px;
+  font-family: 'Courier New', monospace; font-size: 12px;
+  margin: 0 0 12px;
+}
+.sample .formula {
+  font-size: 15px; margin: 0 0 12px;
+  font-style: italic;
+}
+.sample .accent-box {
+  padding: 8px 14px; border-radius: 6px;
+  font-size: 13px; margin: 0 0 8px;
+}
+.sample .tag {
+  display: inline-block; padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; margin: 2px;
+}
+/* Tech Innovation */
+.tech .theme-header { background: #1e1e1e; color: #fff; }
+.tech .sample { background: #1e1e1e; color: #ccc; }
+.tech .sample h3 { color: #00ffff; }
+.tech .sample .code-block { background: #2a2a2a; color: #00ffff; border-left: 3px solid #0066ff; }
+.tech .sample .formula { color: #00ffff; }
+.tech .sample .accent-box { background: #0066ff22; color: #0066ff; border: 1px solid #0066ff44; }
+.tech .sample .tag { background: #0066ff33; color: #00ffff; }
+
+/* Ocean Depths */
+.ocean .theme-header { background: #1a2332; color: #f1faee; }
+.ocean .sample { background: #1a2332; color: #c0d0d8; }
+.ocean .sample h3 { color: #a8dadc; }
+.ocean .sample .code-block { background: #0d1520; color: #a8dadc; border-left: 3px solid #2d8b8b; }
+.ocean .sample .formula { color: #a8dadc; }
+.ocean .sample .accent-box { background: #2d8b8b22; color: #2d8b8b; border: 1px solid #2d8b8b44; }
+.ocean .sample .tag { background: #2d8b8b33; color: #a8dadc; }
+
+/* Midnight Galaxy */
+.galaxy .theme-header { background: #2b1e3e; color: #e6e6fa; }
+.galaxy .sample { background: #2b1e3e; color: #c8c0d8; }
+.galaxy .sample h3 { color: #a490c2; }
+.galaxy .sample .code-block { background: #1a1228; color: #a490c2; border-left: 3px solid #4a4e8f; }
+.galaxy .sample .formula { color: #a490c2; }
+.galaxy .sample .accent-box { background: #4a4e8f22; color: #4a4e8f; border: 1px solid #4a4e8f44; }
+.galaxy .sample .tag { background: #4a4e8f33; color: #a490c2; }
+</style>
+</head>
+<body>
+<h1>Theme Preview - 主题对比预览</h1>
+<div class="themes">
+
+  <!-- Tech Innovation -->
+  <div class="theme-card tech">
+    <div class="theme-header">
+      <h2>Tech Innovation</h2>
+      <p>AI/ML presentations, tech startups</p>
+    </div>
+    <div class="colors">
+      <div class="color" style="background:#1e1e1e;color:#888">#1e1e1e</div>
+      <div class="color" style="background:#0066ff">#0066ff</div>
+      <div class="color" style="background:#00ffff;color:#111">#00ffff</div>
+      <div class="color" style="background:#ffffff;color:#111">#ffffff</div>
+    </div>
+    <div class="sample">
+      <h3>Attention Mechanism</h3>
+      <div class="formula">softmax(QK<sup>T</sup> / √d<sub>k</sub>) · V</div>
+      <div class="code-block">
+<span style="color:#0066ff">def</span> attention(Q, K, V):
+    scores = Q @ K.T / sqrt(d_k)
+    <span style="color:#0066ff">return</span> softmax(scores) @ V
+      </div>
+      <div class="accent-box">Key Insight: O(N²) → O(N) with Flash Attention</div>
+      <div>
+        <span class="tag">Speculative Decoding</span>
+        <span class="tag">KV Cache</span>
+        <span class="tag">Quantization</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ocean Depths -->
+  <div class="theme-card ocean">
+    <div class="theme-header">
+      <h2>Ocean Depths</h2>
+      <p>Professional, corporate, consulting</p>
+    </div>
+    <div class="colors">
+      <div class="color" style="background:#1a2332;color:#888">#1a2332</div>
+      <div class="color" style="background:#2d8b8b">#2d8b8b</div>
+      <div class="color" style="background:#a8dadc;color:#111">#a8dadc</div>
+      <div class="color" style="background:#f1faee;color:#111">#f1faee</div>
+    </div>
+    <div class="sample">
+      <h3>Attention Mechanism</h3>
+      <div class="formula">softmax(QK<sup>T</sup> / √d<sub>k</sub>) · V</div>
+      <div class="code-block">
+<span style="color:#2d8b8b">def</span> attention(Q, K, V):
+    scores = Q @ K.T / sqrt(d_k)
+    <span style="color:#2d8b8b">return</span> softmax(scores) @ V
+      </div>
+      <div class="accent-box">Key Insight: O(N²) → O(N) with Flash Attention</div>
+      <div>
+        <span class="tag">Speculative Decoding</span>
+        <span class="tag">KV Cache</span>
+        <span class="tag">Quantization</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Midnight Galaxy -->
+  <div class="theme-card galaxy">
+    <div class="theme-header">
+      <h2>Midnight Galaxy</h2>
+      <p>Creative, dramatic, luxury</p>
+    </div>
+    <div class="colors">
+      <div class="color" style="background:#2b1e3e;color:#888">#2b1e3e</div>
+      <div class="color" style="background:#4a4e8f">#4a4e8f</div>
+      <div class="color" style="background:#a490c2">#a490c2</div>
+      <div class="color" style="background:#e6e6fa;color:#111">#e6e6fa</div>
+    </div>
+    <div class="sample">
+      <h3>Attention Mechanism</h3>
+      <div class="formula">softmax(QK<sup>T</sup> / √d<sub>k</sub>) · V</div>
+      <div class="code-block">
+<span style="color:#a490c2">def</span> attention(Q, K, V):
+    scores = Q @ K.T / sqrt(d_k)
+    <span style="color:#a490c2">return</span> softmax(scores) @ V
+      </div>
+      <div class="accent-box">Key Insight: O(N²) → O(N) with Flash Attention</div>
+      <div>
+        <span class="tag">Speculative Decoding</span>
+        <span class="tag">KV Cache</span>
+        <span class="tag">Quantization</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

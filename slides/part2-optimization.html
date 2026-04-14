@@ -1,0 +1,551 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     Part 2: 推理加速技术
+     主讲人 B · ~15 min · 10 slides
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- P2-S1: 推理瓶颈分类 (代码图表: Roofline) -->
+<section data-part="2">
+  <h2>推理瓶颈：Memory-bound vs Compute-bound</h2>
+  <div class="two-column">
+    <div>
+      <div class="math-block">
+        $$\text{Arithmetic Intensity} = \frac{\text{FLOPs}}{\text{Bytes accessed}}$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li><span class="accent">Memory-bound</span>: 算术强度低，GPU 等待数据
+          <div class="dim" style="font-size:0.85em;">→ Decode 阶段的 Attention 计算</div>
+        </li>
+        <li><span class="accent">Compute-bound</span>: 算术强度高，GPU 算力饱和
+          <div class="dim" style="font-size:0.85em;">→ Prefill 阶段的大矩阵乘法</div>
+        </li>
+      </ul>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">核心洞察</div>
+        <p style="margin:0; font-size:0.85em;">LLM 推理的瓶颈在 <strong>Decode 阶段的内存带宽</strong>，不是算力。加速的关键：减少访存量或提高访存效率。</p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-roofline.png" alt="Roofline Model" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">Roofline Model（图表由 Python 生成。硬件参数参考 NVIDIA A100 80GB SXM4 规格：HBM 带宽 2039 GB/s，FP16 Tensor Core 312 TFLOPS）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    大家好，承接刚才的内容，我们知道 LLM 推理的瓶颈在 Decode 阶段的内存带宽。这一页我们从更底层的视角来分析。
+    <br><br>
+    Roofline Model 是分析硬件性能瓶颈的经典模型。核心概念是算术强度，等于计算量除以访存量。算术强度低意味着 GPU 大量时间在等数据，这就是 Memory-bound。算术强度高意味着 GPU 算力跑满了，这就是 Compute-bound。
+    <br><br>
+    看右边的 Roofline 图。在算术强度较低的区域，性能被内存带宽限制，曲线是上升的。到了算术强度足够高时，性能被算力限制，曲线变成平台。LLM 的 Decode 阶段恰恰落在左边这个上升区域——每个 token 要读取几十 GB 的模型权重，但只做几 GFLOP 的计算，算术强度很低。
+    <br><br>
+    所以加速推理有三个核心方向：减少模型大小，也就是量化；减少访存次数，比如 Flash Attention；或者用小模型来帮忙，也就是 Speculative Decoding。接下来逐一介绍。
+  </aside>
+</section>
+
+<!-- P2-S2: Speculative Decoding 原理 (SVG) -->
+<section data-part="2">
+  <h2>Speculative Decoding（投机解码）</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 800 310" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <defs>
+        <marker id="ah-p2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+
+      <!-- Step 1: Draft -->
+      <rect x="20" y="20" width="230" height="130" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <text x="135" y="48" text-anchor="middle" font-size="14" fill="#5ec4c4" font-weight="700">Step 1: Draft（草拟）</text>
+      <text x="135" y="68" text-anchor="middle" font-size="11" fill="#8faab0">小模型快速生成 K 个 token</text>
+
+      <rect x="40" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="40" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_1$</div></foreignObject>
+      <rect x="110" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="110" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_2$</div></foreignObject>
+      <rect x="180" y="82" width="60" height="28" rx="4" fill="#5ec4c4" opacity="0.3"/>
+      <foreignObject x="180" y="82" width="60" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#f1faee;text-align:center;line-height:28px;">$t_3$</div></foreignObject>
+
+      <text x="135" y="138" text-anchor="middle" font-size="11" fill="#5ec4c4">🚀 快！但可能不准</text>
+
+      <!-- Arrow to Step 2 -->
+      <line x1="260" y1="85" x2="290" y2="85" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+
+      <!-- Step 2: Verify -->
+      <rect x="295" y="20" width="230" height="130" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="2"/>
+      <text x="410" y="48" text-anchor="middle" font-size="14" fill="#2d8b8b" font-weight="700">Step 2: Verify（验证）</text>
+      <text x="410" y="68" text-anchor="middle" font-size="11" fill="#8faab0">大模型一次前向传播验证所有 K 个</text>
+
+      <rect x="315" y="82" width="60" height="28" rx="4" fill="#2d8b8b" opacity="0.3"/>
+      <text x="345" y="100" text-anchor="middle" font-size="12" fill="#f1faee">✓</text>
+      <rect x="385" y="82" width="60" height="28" rx="4" fill="#2d8b8b" opacity="0.3"/>
+      <text x="415" y="100" text-anchor="middle" font-size="12" fill="#f1faee">✓</text>
+      <rect x="455" y="82" width="60" height="28" rx="4" fill="#e09060" opacity="0.3" stroke="#e09060" stroke-width="1"/>
+      <text x="485" y="100" text-anchor="middle" font-size="12" fill="#e09060">✗</text>
+
+      <foreignObject x="315" y="127" width="190" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#2d8b8b;text-align:center;line-height:16px;">大模型一次验证 $=1$ 次前向传播</div></foreignObject>
+
+      <!-- Arrow to Step 3 -->
+      <line x1="535" y1="85" x2="565" y2="85" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+
+      <!-- Step 3: Result -->
+      <rect x="570" y="20" width="210" height="130" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="2"/>
+      <text x="675" y="48" text-anchor="middle" font-size="14" fill="#a8dadc" font-weight="700">Step 3: 输出</text>
+
+      <rect x="590" y="62" width="55" height="28" rx="4" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="590" y="62" width="55" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#1a2332;text-align:center;line-height:28px;font-weight:700;">$t_1$ ✓</div></foreignObject>
+      <rect x="655" y="62" width="55" height="28" rx="4" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="655" y="62" width="55" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#1a2332;text-align:center;line-height:28px;font-weight:700;">$t_2$ ✓</div></foreignObject>
+      <rect x="720" y="62" width="50" height="28" rx="4" fill="#e09060" stroke="none"/>
+      <text x="745" y="80" text-anchor="middle" font-size="12" fill="#1a2332" font-weight="700">重采</text>
+
+      <foreignObject x="600" y="102" width="150" height="22"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#a8dadc;text-align:center;line-height:22px;">$K=3$ 时接受 2 个 $=2\times$ 加速</div></foreignObject>
+      <text x="675" y="138" text-anchor="middle" font-size="11" fill="#8faab0">结果分布与大模型完全一致！</text>
+
+      <!-- Bottom analogy -->
+      <rect x="20" y="170" width="760" height="50" rx="8" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+      <text x="400" y="192" text-anchor="middle" font-size="13" fill="#a8dadc">类比：实习生（小模型）写草稿 → 主管（大模型）一次审核 → 接受的留下，不接受的打回重写</text>
+      <text x="400" y="210" text-anchor="middle" font-size="12" fill="#8faab0">关键：主管只需看一遍（1 次前向传播），但可能一次性通过多个 token</text>
+
+      <!-- Variants -->
+      <rect x="20" y="235" width="760" height="65" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1" opacity="0.5"/>
+      <text x="400" y="258" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">变体</text>
+      <text x="160" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Medusa: 多头并行预测</text>
+      <text x="400" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Eagle: 特征级草拟</text>
+      <text x="640" y="280" text-anchor="middle" font-size="12" fill="#8faab0">Self-Spec: 同模型不同层</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    首先介绍一种非常巧妙的加速方法——Speculative Decoding，投机解码。
+    <br><br>
+    核心想法用一个类比来理解：实习生写草稿，主管来审核。实习生相当于一个小模型，比如 $7\text{B}$，虽然不是那么准但生成速度很快。主管相当于大模型，比如 $70\text{B}$，虽然很准但每次推理很慢。
+    <br><br>
+    具体流程分三步，请看图。第一步 Draft，小模型快速生成 $K$ 个 token 作为草稿。第二步 Verify，大模型用一次前向传播同时验证这 $K$ 个 token。第三步输出，从左到右逐个检查，小模型猜对的就接受，猜错的就拒绝并重新采样。
+    <br><br>
+    图上的例子：$K=3$，小模型生成了 $t_1$、$t_2$、$t_3$ 三个 token。大模型验证后 $t_1$ 和 $t_2$ 通过了，$t_3$ 被拒绝。最终一次循环就产出了 $2$ 个有效 token，相当于 $2\times$ 加速。
+    <br><br>
+    最关键的性质是：最终输出的概率分布和大模型完全一致，不会有任何质量损失。这个等价性有严格的数学证明，下一页我们来看。
+  </aside>
+</section>
+
+<!-- P2-S3: Speculative Decoding 数学推导 -->
+<section data-part="2">
+  <h2>Speculative Decoding：为什么结果等价？</h2>
+  <div style="max-width:100%; margin:0 auto;">
+    <p>目标：证明用 Speculative Decoding 采样的 token 分布与直接从大模型 $p$ 采样<strong>完全一致</strong>。</p>
+
+    <div style="display:flex; gap:1em; margin-top:0.5em;">
+      <div style="flex:1;">
+        <div class="callout">
+          <div class="callout-title">接受概率</div>
+          <div class="math-block" style="margin:0.3em 0;">
+            $$p_{\text{accept}}(x) = \min\!\left(1,\; \frac{p(x)}{q(x)}\right)$$
+          </div>
+          <p style="font-size:0.85em; margin:0;">$p$ = 大模型概率，$q$ = 小模型概率<br>如果 $p(x) \geq q(x)$：必接受<br>如果 $p(x) < q(x)$：以 $p(x)/q(x)$ 的概率接受</p>
+        </div>
+      </div>
+      <div style="flex:1;">
+        <div class="callout">
+          <div class="callout-title">拒绝后重采样</div>
+          <div class="math-block" style="margin:0.3em 0;">
+            $$p_{\text{resample}}(x) = \frac{\max(0,\; p(x) - q(x))}{\sum_{x'} \max(0,\; p(x') - q(x'))}$$
+          </div>
+          <p style="font-size:0.85em; margin:0;">只从 $p > q$ 的区域重新采样<br>保证最终分布为 $p$</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:0.5em; text-align:center;">
+      <p style="font-size:0.9em;">最终采样分布：</p>
+      <div class="math-block">
+        $$P_{\text{final}}(x) = \underbrace{q(x) \cdot \min\!\left(1, \frac{p(x)}{q(x)}\right)}_{\text{被接受}} + \underbrace{\left(1 - \sum_{x'} q(x') \min\!\left(1, \frac{p(x')}{q(x')}\right)\right)}_{\text{拒绝概率}} \cdot \underbrace{p_{\text{resample}}(x)}_{\text{重采样}} = p(x) \;\checkmark$$
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:0.3em;">
+      <div class="callout-title">期望加速比</div>
+      <p style="margin:0; font-size:0.85em;">若小模型与大模型平均接受率 $\alpha$，draft 长度 $K$，则期望每步输出 token 数：$\frac{1}{1-\alpha}$ 倍</p>
+    </div>
+  </div>
+  <aside class="notes">
+    这一页我们证明 Speculative Decoding 的输出分布与大模型完全一致。
+    <br><br>
+    左边是接受概率的公式：$p_{\text{accept}}(x) = \min\!\left(1,\; \frac{p(x)}{q(x)}\right)$，其中 $p$ 是大模型的概率，$q$ 是小模型的概率。如果大模型认为这个 token 的概率大于等于小模型的概率，直接接受。如果小模型给出的概率过高，就以 $p(x)/q(x)$ 的概率接受。
+    <br><br>
+    右边是被拒绝后的重采样公式：只从大模型概率高于小模型的那些 token 中重新采样，权重是 $p(x) - q(x)$。
+    <br><br>
+    下面是完整的推导：最终采样分布等于被接受的部分加上被拒绝后重采样的部分。经过化简，最终结果恰好等于 $p(x)$，也就是大模型本身的分布。这就是为什么 Speculative Decoding 可以保证输出质量不变。
+    <br><br>
+    实践中，如果小模型和大模型比较接近，接受率 $\alpha$ 通常在 $0.8$ 到 $0.9$ 之间，这意味着 $3$ 到 $5$ 倍的加速。
+  </aside>
+</section>
+
+<!-- P2-S4: Speculative Decoding 加速比分析 -->
+<section data-part="2">
+  <h2>Speculative Decoding：加速比分析</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-spec-decode.png" alt="Speculative Decoding Speedup" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，基于理论加速比模型，$c{=}0.1$ 为小模型相对大模型的前向传播时间比）</p>
+    </div>
+    <div>
+      <ul style="font-size:0.88em;">
+        <li>加速比取决于 <span class="accent">接受率 $\alpha$</span> 和 <span class="accent">Draft 长度 $K$</span></li>
+        <li style="margin-top:0.5em;">$\alpha = 0.9,\ K = 5$ → <strong style="color:#5ec4c4;">~3× 加速</strong></li>
+        <li style="margin-top:0.5em;">$\alpha$ 越高（draft 越准确），加速越明显</li>
+        <li style="margin-top:0.5em;">$K$ 太大收益递减（$\alpha^k$ 快速衰减）</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <div class="callout-title">实践建议</div>
+        <p style="margin:0; font-size:0.85em;">
+          通常 $K \in [4, 7]$，选择与 target 同系列的 small draft model 可获得 $\alpha > 0.9$。<br>
+          关键约束：不改变输出分布（数学等价性保证）。
+        </p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    上一页证明了数学等价性，这页用图表展示实际加速效果。
+    <br><br>
+    横轴是草稿长度 $K$，纵轴是期望加速比，不同颜色的曲线代表不同的接受率 $\alpha$。可以看到，当接受率 $\alpha=0.9$、$K=5$ 时，能获得约 3 倍加速。但 $K$ 继续增大后收益递减，因为 $K$ 个 token 全部正确的概率是 $\alpha^K$，会快速衰减。
+    <br><br>
+    实践中的建议：$K$ 通常设为 $4$ 到 $7$，草稿模型选择与大模型同系列的小模型，这样可以获得 $0.9$ 以上的接受率。关键约束是不改变输出分布——这是由数学等价性保证的。
+    <br><br>
+    总结一下 Speculative Decoding：无损加速，原理简洁，效果显著。接下来我们看另一个优化方向——量化。
+  </aside>
+</section>
+
+<!-- P2-S5: 模型量化基础 (SVG) -->
+<section data-part="2">
+  <h2>模型量化 (Quantization)</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 240" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- FP16 number line -->
+          <text x="200" y="20" text-anchor="middle" font-size="14" fill="#2d8b8b" font-weight="700">FP16 (65536 个值)</text>
+          <line x1="30" y1="40" x2="370" y2="40" stroke="#a8dadc" stroke-width="2"/>
+          <!-- Dense dots -->
+          <g fill="#2d8b8b" opacity="0.7">
+            <circle cx="40" cy="40" r="2"/><circle cx="48" cy="40" r="2"/><circle cx="56" cy="40" r="2"/>
+            <circle cx="64" cy="40" r="2"/><circle cx="72" cy="40" r="2"/><circle cx="80" cy="40" r="2"/>
+            <circle cx="88" cy="40" r="2"/><circle cx="96" cy="40" r="2"/><circle cx="104" cy="40" r="2"/>
+            <circle cx="112" cy="40" r="2"/><circle cx="120" cy="40" r="2"/><circle cx="128" cy="40" r="2"/>
+            <circle cx="136" cy="40" r="2"/><circle cx="144" cy="40" r="2"/><circle cx="152" cy="40" r="2"/>
+            <circle cx="160" cy="40" r="2"/><circle cx="168" cy="40" r="2"/><circle cx="176" cy="40" r="2"/>
+            <circle cx="184" cy="40" r="2"/><circle cx="192" cy="40" r="2"/><circle cx="200" cy="40" r="2"/>
+            <circle cx="208" cy="40" r="2"/><circle cx="216" cy="40" r="2"/><circle cx="224" cy="40" r="2"/>
+            <circle cx="232" cy="40" r="2"/><circle cx="240" cy="40" r="2"/><circle cx="248" cy="40" r="2"/>
+            <circle cx="256" cy="40" r="2"/><circle cx="264" cy="40" r="2"/><circle cx="272" cy="40" r="2"/>
+            <circle cx="280" cy="40" r="2"/><circle cx="288" cy="40" r="2"/><circle cx="296" cy="40" r="2"/>
+            <circle cx="304" cy="40" r="2"/><circle cx="312" cy="40" r="2"/><circle cx="320" cy="40" r="2"/>
+            <circle cx="328" cy="40" r="2"/><circle cx="336" cy="40" r="2"/><circle cx="344" cy="40" r="2"/>
+            <circle cx="352" cy="40" r="2"/><circle cx="360" cy="40" r="2"/>
+          </g>
+          <text x="30" y="58" font-size="10" fill="#8faab0">-3.0</text>
+          <text x="185" y="58" font-size="10" fill="#8faab0">0</text>
+          <text x="355" y="58" font-size="10" fill="#8faab0">3.0</text>
+
+          <!-- Arrow -->
+          <path d="M200 75 L200 95" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-p2)"/>
+          <text x="230" y="90" font-size="11" fill="#a8dadc">量化</text>
+
+          <!-- INT4 number line -->
+          <text x="200" y="120" text-anchor="middle" font-size="14" fill="#e0b060" font-weight="700">INT4 (16 个值)</text>
+          <line x1="30" y1="140" x2="370" y2="140" stroke="#a8dadc" stroke-width="2"/>
+          <!-- Sparse dots -->
+          <g fill="#e0b060">
+            <circle cx="40" cy="140" r="4"/><circle cx="84" cy="140" r="4"/>
+            <circle cx="127" cy="140" r="4"/><circle cx="171" cy="140" r="4"/>
+            <circle cx="200" cy="140" r="5" stroke="#a8dadc" stroke-width="1"/>
+            <circle cx="229" cy="140" r="4"/><circle cx="273" cy="140" r="4"/>
+            <circle cx="316" cy="140" r="4"/><circle cx="360" cy="140" r="4"/>
+          </g>
+          <text x="30" y="158" font-size="10" fill="#8faab0">-8</text>
+          <text x="195" y="158" font-size="10" fill="#8faab0">0</text>
+          <text x="352" y="158" font-size="10" fill="#8faab0">7</text>
+
+          <!-- Formula -->
+          <rect x="40" y="175" width="320" height="35" rx="6" fill="#223044" stroke="#e0b060" stroke-width="1"/>
+          <foreignObject x="40" y="180" width="320" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e0b060;text-align:center;line-height:28px;">$x_q = \text{round}(x / s) + z$</div></foreignObject>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>用<strong>更少位数</strong>表示模型权重，牺牲少量精度换取：</p>
+      <ul style="font-size:0.88em;">
+        <li><span class="accent">减少显存</span>：$\text{FP16}\to\text{INT4}$，模型体积缩小 $4\times$</li>
+        <li><span class="accent">加速推理</span>：更小的数据 $\to$ 更少的访存</li>
+        <li><span class="accent">更大 batch</span>：省下的显存可服务更多请求</li>
+      </ul>
+      <table style="font-size:0.85em; margin-top:0.5em;">
+        <tr><th>精度</th><th>每参数字节</th><th>7B 模型大小</th><th>质量损失</th></tr>
+        <tr><td>FP16</td><td>2 B</td><td>14 GB</td><td>—</td></tr>
+        <tr><td>INT8</td><td>1 B</td><td>7 GB</td><td>极小</td></tr>
+        <tr><td>INT4</td><td>0.5 B</td><td>3.5 GB</td><td>小</td></tr>
+      </table>
+    </div>
+  </div>
+  <aside class="notes">
+    量化的核心思想很简单：用更少的位数来表示模型的权重。
+    <br><br>
+    请看左边的数轴对比。上面一行是 FP16，也就是半精度浮点数，可以表示 65536 个不同的值，点非常密集。下面一行是 INT4，只有 16 个不同的值，点非常稀疏。量化的过程就是把密集的浮点值映射到稀疏的离散值上，用公式表示就是 $x_q = \text{round}(x/s) + z$，其中 $s$ 是缩放因子，$z$ 是零点。
+    <br><br>
+    这就像把一张高清照片压缩成缩略图——肉眼看差别不大，但文件小了很多。
+    <br><br>
+    看右边的表格：FP16 时 LLaMA-2-7B 占 $14\,\text{GB}$，量化到 INT8 只要 $7\,\text{GB}$，INT4 只要 $3.5\,\text{GB}$，可以在消费级 GPU 上运行。量化带来的好处是三重的：减少显存占用、加速推理因为减少了访存量、以及省下的显存可以服务更多请求。质量损失通常很小，在 $1\%$ 到 $3\%$ 之间。
+  </aside>
+</section>
+
+<!-- P2-S6: GPTQ 量化原理 -->
+<section data-part="2">
+  <h2>GPTQ：逐层最优量化</h2>
+  <div class="two-column">
+    <div>
+      <p>问题：直接四舍五入会累积误差。GPTQ 的思路：</p>
+      <div class="math-block">
+        $$\hat{W}^* = \arg\min_{\hat{W}} \left\| WX - \hat{W}X \right\|_2^2$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>不是单独量化每个权重，而是考虑<strong>整层输出误差</strong></li>
+        <li>利用 <span class="accent">Hessian 矩阵</span> $H = 2XX^T$ 指导量化</li>
+        <li>逐列量化权重，同时调整未量化的列来补偿误差</li>
+        <li>只需少量校准数据（~128 条）</li>
+      </ul>
+      <div class="callout" style="margin-top:0.4em;">
+        <div class="callout-title">与简单量化对比</div>
+        <p style="margin:0; font-size:0.85em;">Simple RTN: round-to-nearest，忽略层间关系<br>GPTQ: 考虑权重间的相关性，量化后层输出更接近原始</p>
+      </div>
+    </div>
+    <div>
+      <div class="callout" style="border-left-color:#5ec4c4;">
+        <div class="callout-title" style="color:#5ec4c4;">其他量化方法</div>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>AWQ</strong> (Activation-aware): 基于激活值重要性保护关键权重通道</p>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>GGUF</strong>: 支持 CPU 推理的量化格式，可在笔记本上运行 LLM</p>
+        <p style="font-size:0.85em; margin:0.3em 0;"><strong>SmoothQuant</strong>: 将激活值的量化难度迁移到权重上</p>
+      </div>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">实践建议</div>
+        <p style="margin:0; font-size:0.85em;">INT4 量化通常损失 &lt; 1% 精度<br>推荐：GPTQ/AWQ 用于 GPU，GGUF 用于 CPU</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    简单的四舍五入量化会累积误差，GPTQ 提出了更好的方案。
+    <br><br>
+    它的目标是最小化量化后整层输出的误差，公式在左边：寻找一个量化后的权重矩阵，使得它乘以 X 和原始权重乘以 X 尽可能接近。关键技巧是利用 Hessian 矩阵来指导量化——它告诉我们哪些权重对输出影响更大，需要更小心地量化。方法是逐列量化，每量化完一列，就调整还没量化的列来补偿误差。
+    <br><br>
+    实践中只需要 $128$ 条校准数据，量化后精度损失极小，不到 $1\%$。
+    <br><br>
+    右边列出了其他常见的量化方法：AWQ 基于激活值的重要性来保护关键通道；GGUF 支持 CPU 推理，可以在笔记本电脑上运行大模型；SmoothQuant 则是把激活值的量化难度迁移到权重上。总体建议是：GPU 推理用 GPTQ 或 AWQ，CPU 推理用 GGUF。
+  </aside>
+</section>
+
+<!-- P2-S7: Flash Attention (SVG) -->
+<section data-part="2">
+  <h2>Flash Attention：分块计算</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <!-- Standard Attention -->
+      <text x="195" y="22" text-anchor="middle" font-size="15" fill="#e09060" font-weight="700">Standard Attention</text>
+
+      <!-- Large N×N grid -->
+      <rect x="40" y="35" width="300" height="200" rx="4" fill="#223044" stroke="#e09060" stroke-width="2"/>
+      <!-- Grid lines -->
+      <g stroke="#3a4a5a" stroke-width="0.5" opacity="0.5">
+        <line x1="100" y1="35" x2="100" y2="235"/><line x1="160" y1="35" x2="160" y2="235"/>
+        <line x1="220" y1="35" x2="220" y2="235"/><line x1="280" y1="35" x2="280" y2="235"/>
+        <line x1="40" y1="75" x2="340" y2="75"/><line x1="40" y1="115" x2="340" y2="115"/>
+        <line x1="40" y1="155" x2="340" y2="155"/><line x1="40" y1="195" x2="340" y2="195"/>
+      </g>
+      <foreignObject x="130" y="130" width="120" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:22px;color:#e09060;text-align:center;line-height:28px;opacity:0.6;">$N \times N$</div></foreignObject>
+      <text x="190" y="175" text-anchor="middle" font-size="14" fill="#e09060">完整注意力矩阵</text>
+
+      <rect x="75" y="255" width="230" height="30" rx="6" fill="#223044" stroke="#e09060" stroke-width="1"/>
+      <foreignObject x="75" y="255" width="230" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">显存: $O(N^2)$ ❌</div></foreignObject>
+
+      <rect x="75" y="290" width="230" height="25" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1" opacity="0.5"/>
+      <foreignObject x="75" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ $256\text{M}$ 元素</div></foreignObject>
+
+      <!-- Arrow -->
+      <text x="395" y="140" text-anchor="middle" font-size="24" fill="#a8dadc">→</text>
+      <text x="395" y="165" text-anchor="middle" font-size="11" fill="#8faab0">Flash Attn</text>
+
+      <!-- Flash Attention -->
+      <text x="585" y="22" text-anchor="middle" font-size="15" fill="#5ec4c4" font-weight="700">Flash Attention</text>
+
+      <rect x="430" y="35" width="300" height="200" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+      <!-- Small tiled blocks -->
+      <g fill="#5ec4c4" opacity="0.25" stroke="#5ec4c4" stroke-width="1">
+        <rect x="440" y="45" width="55" height="45" rx="3"/>
+        <rect x="500" y="45" width="55" height="45" rx="3"/>
+        <rect x="440" y="95" width="55" height="45" rx="3"/>
+        <rect x="500" y="95" width="55" height="45" rx="3"/>
+        <rect x="600" y="45" width="55" height="45" rx="3"/>
+        <rect x="660" y="45" width="55" height="45" rx="3"/>
+        <rect x="600" y="95" width="55" height="45" rx="3"/>
+        <rect x="660" y="95" width="55" height="45" rx="3"/>
+        <rect x="440" y="160" width="55" height="45" rx="3"/>
+        <rect x="500" y="160" width="55" height="45" rx="3"/>
+        <rect x="440" y="210" width="55" height="20" rx="3"/>
+        <rect x="500" y="210" width="55" height="20" rx="3"/>
+        <rect x="600" y="160" width="55" height="45" rx="3"/>
+        <rect x="660" y="160" width="55" height="45" rx="3"/>
+        <rect x="600" y="210" width="55" height="20" rx="3"/>
+        <rect x="660" y="210" width="55" height="20" rx="3"/>
+      </g>
+      <text x="580" y="145" text-anchor="middle" font-size="16" fill="#5ec4c4" opacity="0.8">分块处理</text>
+      <text x="580" y="170" text-anchor="middle" font-size="12" fill="#5ec4c4">不存完整矩阵</text>
+
+      <rect x="465" y="255" width="230" height="30" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1"/>
+      <foreignObject x="465" y="255" width="230" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#5ec4c4;text-align:center;line-height:30px;">显存: $O(N)$ ✓</div></foreignObject>
+
+      <rect x="465" y="290" width="230" height="25" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1" opacity="0.5"/>
+      <foreignObject x="465" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ 仅几千元素</div></foreignObject>
+    </svg>
+  </div>
+  <aside class="notes">
+    接下来看一个系统层面的优化——Flash Attention。
+    <br><br>
+    标准 Attention 的显存瓶颈在哪里？在计算 softmax 时，要先算出一个 $N \times N$ 的完整注意力矩阵。$N=8192$ 时，这个矩阵有 $6700$ 万元素，单层单头就要 $128\,\text{MB}$。这显然不可持续。
+    <br><br>
+    Flash Attention 的创新在于分块计算。看右边的示意图：不再是完整的大矩阵，而是把 $Q$、$K$、$V$ 分成小块，在 GPU 的快速 SRAM 缓存里计算局部注意力，然后累积结果。关键是不需要把完整的 $N \times N$ 矩阵写回慢速的 HBM 显存。
+    <br><br>
+    数学结果和标准 Attention 完全一致，但显存从 $O(N^2)$ 降到了 $O(N)$。实际效果是在长序列推理时速度提升 $2$ 到 $4$ 倍，显存大幅减少。这是一个非常重要的优化，几乎所有现代 LLM 推理框架都默认使用 Flash Attention。
+  </aside>
+</section>
+
+<!-- P2-S8: PagedAttention & 分布式推理 (SVG) -->
+<section data-part="2">
+  <h2>PagedAttention &amp; 分布式推理</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- Traditional -->
+          <text x="95" y="18" text-anchor="middle" font-size="12" fill="#e09060" font-weight="700">传统分配</text>
+          <rect x="10" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#e09060" stroke-width="1.5"/>
+          <rect x="15" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="55" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="95" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="15" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="55" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="95" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="15" y="80" width="35" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="55" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <rect x="95" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <text x="160" y="95" font-size="10" fill="#e09060">碎片!</text>
+
+          <!-- Arrow -->
+          <text x="195" y="70" text-anchor="middle" font-size="16" fill="#a8dadc">→</text>
+
+          <!-- Paged -->
+          <text x="285" y="18" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">PagedAttention</text>
+          <rect x="200" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <rect x="205" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="240" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="275" y="30" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="310" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="205" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="240" y="55" width="30" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="275" y="55" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="310" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <text x="285" y="95" text-anchor="middle" font-size="10" fill="#5ec4c4">页表映射，无碎片</text>
+
+          <!-- Labels -->
+          <rect x="10" y="130" width="360" height="35" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+          <text x="190" y="152" text-anchor="middle" font-size="12" fill="#a8dadc">灵感来自操作系统虚拟内存分页机制</text>
+
+          <!-- Distributed -->
+          <rect x="10" y="180" width="360" height="70" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1" opacity="0.5"/>
+          <text x="190" y="200" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">超大模型的分布式推理</text>
+          <text x="190" y="220" text-anchor="middle" font-size="11" fill="#8faab0">Tensor Parallelism: 将每层的权重切分到多张 GPU</text>
+          <text x="190" y="238" text-anchor="middle" font-size="11" fill="#8faab0">Pipeline Parallelism: 将不同层放到不同 GPU</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p><span class="accent">PagedAttention</span> (vLLM):</p>
+      <ul style="font-size:0.88em;">
+        <li>KV Cache 分成固定大小的<strong>页/块</strong></li>
+        <li>像 OS 虚拟内存一样管理</li>
+        <li>消除显存碎片</li>
+        <li>支持 KV Cache 共享（prefix caching）</li>
+      </ul>
+      <p style="margin-top:0.6em;"><span class="accent">Tensor Parallelism</span>:</p>
+      <ul style="font-size:0.88em;">
+        <li>每层权重切分到多张 GPU</li>
+        <li>$70\text{B}$ 模型：$4\times$ A100 ($80\,\mathrm{GB}$)</li>
+        <li>通信开销：All-Reduce 操作</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    PagedAttention 是 vLLM 框架的核心创新，灵感来自操作系统的虚拟内存管理。
+    <br><br>
+    请看左边两张图的对比。上面是传统的 KV Cache 分配方式：给每个请求预分配一段连续的显存空间。问题是有些请求用不完预分配的空间，造成碎片浪费。下面是 PagedAttention 的做法：把 KV Cache 分成固定大小的块，像操作系统的内存页一样管理。不同请求的 KV Cache 可以不连续存储，通过一个页表来映射。这样就消除了碎片问题，显存利用率从大约 $60\%$ 提升到 $90\%$ 以上。
+    <br><br>
+    下方还提到了分布式推理。当模型大到单张 GPU 放不下时，比如 $70\text{B}$ 模型需要 $4$ 张 A100，有两种并行策略：Tensor Parallelism 是把每一层的权重切分到多张 GPU 上同时计算；Pipeline Parallelism 是把不同的层放到不同的 GPU 上流水线处理。通常两者结合使用。
+  </aside>
+</section>
+
+<!-- P2-S9: 技术全景总结 (PNG) -->
+<section data-part="2">
+  <h2>推理加速技术全景</h2>
+  <div class="img-center">
+    <img src="assets/p2-optimization-landscape.png" alt="推理加速技术全景图" style="max-height:65vh;">
+  </div>
+  <aside class="notes">
+    这张全景图总结了我们介绍的所有推理加速技术，分为四个方向。
+    <br><br>
+    第一，算法优化：核心就是 Speculative Decoding，用小模型帮大模型做投机执行。
+    <br><br>
+    第二，模型压缩：量化是最常用的手段，包括 GPTQ、AWQ 等方法。此外还有剪枝和蒸馏，今天没有展开。
+    <br><br>
+    第三，系统优化：Flash Attention 解决了 Attention 的显存瓶颈，PagedAttention 优化了 KV Cache 的管理，Continuous Batching 提升了服务吞吐量。
+    <br><br>
+    第四，硬件加速：通过 Tensor Parallelism 和 Pipeline Parallelism 实现多 GPU 分布式推理。
+    <br><br>
+    这些技术通常组合使用。比如 INT4 量化加上 Flash Attention 再加上 Speculative Decoding，可以获得累积的加速效果。
+  </aside>
+</section>
+
+<!-- P2-S10: 小结 -->
+<section data-part="2">
+  <h2>Part 2 小结</h2>
+  <div style="display:flex; gap:1.2em;">
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">加速思路</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>Speculative Decoding: 小模型帮大模型</li>
+          <li>量化: 更低位数 $=$ 更少访存</li>
+          <li>Flash Attention: 分块避免 $O(N^2)$</li>
+          <li>PagedAttention: 分页管理 KV Cache</li>
+        </ul>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-seafoam);">
+        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">核心原则</div>
+        <ul style="font-size:0.95em; padding-left:1.2em; margin:0;">
+          <li>推理瓶颈在 <strong>内存带宽</strong></li>
+          <li>所有优化都在减少访存</li>
+          <li>或提高访存效率</li>
+          <li>结果不变（等价性证明）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1.2em; text-align:center;">
+    <p style="margin:0; font-size:1.15em;">单次推理变快后，<span class="accent">能否用更多推理计算提升效果</span>？ → <strong>Part 3</strong></p>
+  </div>
+  <aside class="notes">
+    Part 2 到此结束。我们学习了四项加速技术：Speculative Decoding 用小模型帮大模型，量化用更少位数减少访存，Flash Attention 分块计算避免 $O(N^2)$ 显存，PagedAttention 分页管理 KV Cache。
+    <br><br>
+    核心原则只有一个：推理的瓶颈在内存带宽，所有优化本质上都是在减少访存或提高访存效率。
+    <br><br>
+    前面我们一直在讲如何让单次推理更快。但换个角度想：如果单次推理已经很快了，我们能不能通过多次推理、花更多计算来获得更好的结果呢？这就是 Part 3 的主题——Inference-Time Scaling。请 Y 同学来接力。
+  </aside>
+</section>

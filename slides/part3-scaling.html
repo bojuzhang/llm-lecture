@@ -1,0 +1,481 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     Part 3: Inference-Time Scaling
+     主讲人 C · ~15 min · 10 slides
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- P3-S1: 核心思想 (PNG 大图) -->
+<section data-part="3">
+  <h2>两种 Scaling 范式</h2>
+  <div class="img-center">
+    <img src="assets/p3-two-scaling.png" alt="Training Scaling vs Inference Scaling" style="max-height:55vh;">
+  </div>
+  <div class="callout" style="text-align:center; margin-top:0.3em;">
+    <p style="margin:0; font-size:0.92em;">训练 Scaling（更大模型）vs 推理 Scaling（更多思考）— 两种提升性能的方式</p>
+  </div>
+  <aside class="notes">
+    大家好。前两部分我们关注的是如何让推理更快。现在换一个视角：如果我们愿意在推理时花费更多的计算，能否得到更好的结果？这就是 Inference-Time Scaling 的核心思想。
+    <br><br>
+    请看这张对比图。左边是训练时的 Scaling：用更大的模型、更多的数据、更多的训练算力，来让模型变得更强。这是我们比较熟悉的方式。右边是推理时的 Scaling：保持模型不变，但在推理时使用更多的计算。比如让模型思考更多步、采样更多次、做更深入的搜索。
+    <br><br>
+    打个比方：训练 Scaling 相当于让学生学更多年、读更多书；推理 Scaling 相当于考试时让学生想得更久。两者都能提升表现，但成本和方式不同。
+    <br><br>
+    今天这个第三部分，我们就来探讨推理 Scaling 的各种技术。
+  </aside>
+</section>
+
+<!-- P3-S2: Chain-of-Thought (HTML/CSS 文字排版) -->
+<section data-part="3">
+  <h2>Chain-of-Thought (CoT)</h2>
+  <div style="display:flex; gap:1.2em; margin-top:0.3em;">
+    <!-- Without CoT -->
+    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #e09060;">
+      <div style="color:#e09060; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">❌ 直接回答</div>
+      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
+        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> 一个餐厅有 23 张桌子。每张桌子有 4 把椅子。今天午餐时有 14 张桌子坐了 3 人，5 张桌子坐了 4 人，其余空着。餐厅里有多少人？</p>
+        <p style="margin:0.5em 0 0; color:#e09060;"><strong>A:</strong> 62 人</p>
+        <p style="margin:0.2em 0 0; color:#8faab0; font-size:0.88em;">（一步跳到答案，容易出错）</p>
+      </div>
+    </div>
+    <!-- With CoT -->
+    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #5ec4c4;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">✅ 分步推理 (CoT)</div>
+      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
+        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> （同上）</p>
+        <p style="margin:0.4em 0 0;"><strong style="color:#5ec4c4;">A:</strong> 让我一步步来：</p>
+        <p style="margin:0.2em 0 0; padding-left:0.8em;">1) $14 \times 3 = 42$ 人</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">2) $5 \times 4 = 20$ 人</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">3) 其余 $23-14-5=4$ 张桌子空着</p>
+        <p style="margin:0.1em 0 0; padding-left:0.8em;">4) 总人数 $=42+20=62$ 人</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    最简单的推理 Scaling 方法就是 Chain-of-Thought，也就是思维链。
+    <br><br>
+    请看屏幕上的对比。左边是直接回答：模型看到问题后，一步就给出答案 62 人。问题是，模型要在"脑子里"一步完成所有计算，很容易出错。
+    <br><br>
+    右边是使用 CoT 的方式：模型说"让我一步步来"，然后一步步列出计算过程——14 乘以 3 等于 42 人，5 乘以 4 等于 20 人，剩下 4 张桌子空着，总共 42 加 20 等于 62 人。
+    <br><br>
+    两种方式得到的答案一样，但 CoT 的每一步都很简单，不容易出错。而没有 CoT 时，模型需要一步映射，中间任何计算错误都无法纠正。
+    <br><br>
+    CoT 的关键洞察是：将一个复杂问题分解成多个简单步骤。每步只消耗少量推理计算，但总计算量增加了。这就是"用更多推理计算换更好结果"的最简单形式。
+  </aside>
+</section>
+
+<!-- P3-S3: CoT 为什么有效 -->
+<section data-part="3">
+  <h2>CoT 为什么有效？— 数学直觉</h2>
+  <div class="two-column">
+    <div>
+      <p>直接回答 vs 分步推理：</p>
+      <div class="math-block">
+        $$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>$q$ = 问题，$a$ = 答案，$c$ = 中间推理步骤</li>
+        <li>直接回答需要模型<span class="accent">一步</span>映射 $q \to a$</li>
+        <li>CoT 引入中间变量 $c$，将一步分解为<span class="accent">多步</span></li>
+        <li>每步更简单 $\to$ 出错概率更低</li>
+      </ul>
+      <div class="callout" style="margin-top:0.5em;">
+        <div class="callout-title">Circuit Complexity 视角</div>
+        <p style="margin:0; font-size:0.85em;">CoT 等价于增加神经网络的"计算深度"。更深的网络能表达更复杂的函数。每个推理步骤 $\approx$ 网络多一层。</p>
+      </div>
+    </div>
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah-p3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- Direct -->
+          <rect x="20" y="30" width="80" height="40" rx="6" class="box"/>
+          <foreignObject x="20" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
+          <line x1="100" y1="50" x2="130" y2="50" stroke="#e09060" stroke-width="3" marker-end="url(#ah-p3)"/>
+          <text x="115" y="40" text-anchor="middle" font-size="10" fill="#e09060">1步</text>
+          <rect x="135" y="30" width="80" height="40" rx="6" fill="#223044" stroke="#e09060" stroke-width="2"/>
+          <foreignObject x="135" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">Answer $a$</div></foreignObject>
+          <foreignObject x="120" y="80" width="110" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#e09060;text-align:center;line-height:16px;">深度 $=1$ 层</div></foreignObject>
+
+          <!-- CoT -->
+          <rect x="20" y="120" width="80" height="40" rx="6" class="box"/>
+          <foreignObject x="20" y="125" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
+          <line x1="100" y1="140" x2="130" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="135" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <foreignObject x="135" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_1$</div></foreignObject>
+          <line x1="205" y1="140" x2="225" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="230" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <foreignObject x="230" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_2$</div></foreignObject>
+          <line x1="265" y1="160" x2="265" y2="180" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="230" y="185" width="70" height="30" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="265" y="205" text-anchor="middle" font-size="12" fill="#2d8b8b">...</text>
+          <line x1="230" y1="200" x2="200" y2="200" stroke="#2d8b8b" stroke-width="2" marker-end="url(#ah-p3)"/>
+
+          <rect x="110" y="185" width="90" height="30" rx="6" fill="#2d8b8b" stroke="none"/>
+          <foreignObject x="110" y="190" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:24px;font-weight:700;">Answer $a$</div></foreignObject>
+
+          <foreignObject x="110" y="222" width="130" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#5ec4c4;text-align:center;line-height:20px;">深度 $=T$ 层（$T$步推理）</div></foreignObject>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    CoT 为什么有效？我们可以从数学角度来理解。
+    <br><br>
+    请看左边这个公式。$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$，直接回答时，模型要一步从问题 $q$ 映射到答案 $a$，这是一个很复杂的函数。引入 CoT 后，我们把这个映射分解为多步：$q \to c_1 \to c_2 \to \cdots \to a$。每一步都是一个更简单的函数，出错的概率更低。
+    <br><br>
+    右边用图来直观展示。上面一行是直接回答，只有一层"网络深度"。下面一行是 CoT，有多步推理，相当于网络有 $T$ 层。
+    <br><br>
+    这就引出了 Circuit Complexity 的视角：CoT 本质上增加了神经网络的"计算深度"。理论上有一些问题，浅层网络需要指数级的宽度才能解决，但深层网络可以高效处理。CoT 让模型在推理时获得了额外的深度，这就是 Inference-Time Compute 的本质。
+  </aside>
+</section>
+
+<!-- P3-S4: Self-Consistency (SVG) -->
+<section data-part="3">
+  <h2>Self-Consistency：多次采样 + 多数投票</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 800 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+      <defs>
+        <marker id="ah-sc" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+        </marker>
+      </defs>
+
+      <!-- Question -->
+      <rect x="250" y="10" width="300" height="40" rx="8" fill="#2d8b8b" stroke="none"/>
+      <foreignObject x="250" y="10" width="300" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#1a2332;text-align:center;line-height:30px;font-weight:700;">同一个问题，采样 $N\!=\!5$ 次</div></foreignObject>
+
+      <!-- 5 paths -->
+      <!-- Path 1 -->
+      <line x1="310" y1="50" x2="100" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="30" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="100" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 1</text>
+      <text x="100" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 2 -->
+      <line x1="350" y1="50" x2="250" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="180" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="250" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 2</text>
+      <text x="250" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 3 -->
+      <line x1="400" y1="50" x2="400" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="330" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="400" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 3</text>
+      <text x="400" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 58</text>
+
+      <!-- Path 4 -->
+      <line x1="450" y1="50" x2="550" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="480" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="550" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 4</text>
+      <text x="550" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+
+      <!-- Path 5 -->
+      <line x1="490" y1="50" x2="700" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="630" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="700" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 5</text>
+      <text x="700" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 65</text>
+
+      <!-- Arrows to vote -->
+      <line x1="100" y1="150" x2="300" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="250" y1="150" x2="320" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="400" y1="150" x2="400" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="550" y1="150" x2="480" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="700" y1="150" x2="500" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
+
+      <!-- Vote box -->
+      <rect x="230" y="200" width="340" height="50" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
+      <text x="400" y="220" text-anchor="middle" font-size="13" fill="#a8dadc">多数投票 (Majority Vote)</text>
+      <text x="400" y="240" text-anchor="middle" font-size="14" fill="#a8dadc">62: <tspan fill="#5ec4c4" font-weight="700">3票</tspan> · 58: <tspan fill="#e09060">1票</tspan> · 65: <tspan fill="#e09060">1票</tspan></text>
+
+      <!-- Result -->
+      <line x1="400" y1="250" x2="400" y2="275" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-sc)"/>
+      <rect x="325" y="280" width="150" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
+      <text x="400" y="302" text-anchor="middle" font-size="15" fill="#1a2332" font-weight="700">最终答案: 62 ✓</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    CoT 是一条推理路径。Self-Consistency 是它的自然延伸：不只做一次推理，而是采样多次。
+    <br><br>
+    请看这张图。同一个问题，我们采样 $N=5$ 次。每次走不同的推理路径，得到不同的答案。路径 1 得到 62，路径 2 得到 62，路径 3 得到 58，路径 4 得到 62，路径 5 得到 65。然后做多数投票：62 有 3 票，58 有 1 票，65 有 1 票。最终选择 62 作为答案。
+    <br><br>
+    背后的直觉是：正确的推理路径可能各不相同，但更可能殊途同归，得到同一个正确答案。而错误的路径则是随机分散的，不太可能凑到同一个错误答案上。
+    <br><br>
+    计算开销是 $5$ 次推理，等于 $5\times$ 的计算量，但准确率显著提升。这就是 Inference-Time Scaling 的典型例子：花更多计算换取更好的结果。
+  </aside>
+</section>
+
+<!-- P3-S5: Self-Consistency 投票效果分析 -->
+<section data-part="3">
+  <h2>Self-Consistency：投票效果分析</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-self-consistency-voting.png" alt="Self-Consistency 投票效果" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，基于二项分布模型。$p{=}0.57$ 参考 LLaMA-2-70B 在 GSM8K 上的 8-shot CoT 表现，Touvron et al. 2023）</p>
+    </div>
+    <div>
+      <ul style="font-size:0.88em;">
+        <li>单次推理准确率 $p = 57\%$（LLaMA-2-70B, GSM8K）</li>
+        <li style="margin-top:0.5em;">$N=5$: $\sim 63\%$ &nbsp; $N=11$: $\sim 68\%$</li>
+        <li style="margin-top:0.3em;">$N=21$: $\sim 74\%$ &nbsp; $N=41$: $\sim 82\%$</li>
+        <li style="margin-top:0.5em;"><strong style="color:#5ec4c4;">边际收益递减</strong>，但持续提升</li>
+      </ul>
+      <div class="callout" style="margin-top:0.8em;">
+        <div class="callout-title">Inference-Time Scaling 的核心直觉</div>
+        <p style="margin:0; font-size:0.85em;">
+          更多采样 $\times$ 投票 = 更可靠答案。<br>
+          计算量翻倍 → 准确率持续提升，但存在收益递减。
+        </p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    上一页展示了 Self-Consistency 的原理，这页用量化数据来看投票效果。
+    <br><br>
+    以 LLaMA-2-70B 在 GSM8K 数学推理基准上的表现为例，单次推理准确率是 $57\%$。通过多数投票，$N=5$ 时准确率提升到约 $63\%$，$N=11$ 约 $68\%$，$N=21$ 约 $74\%$，$N=41$ 约 $82\%$。
+    <br><br>
+    但注意边际收益递减：从 $1$ 次到 $11$ 次提升了 $11$ 个百分点，从 $11$ 次到 $41$ 次只提升 $14$ 个百分点，而计算量增加了近 $3$ 倍。
+    <br><br>
+    还有一个重要前提：多数投票要求单次准确率 $p > 0.5$ 才有效。这来自 Condorcet 陪审团定理——如果每个"投票者"正确的概率超过 $1/2$，投票者越多，最终正确的概率就越高。反之如果单次准确率 $p < 0.5$，投票反而会更差。
+    <br><br>
+    总的来说，更多采样加投票等于更可靠的答案，但存在收益递减，需要权衡计算成本。
+  </aside>
+</section>
+
+<!-- P3-S6: Best-of-N & Process Reward Model (SVG) -->
+<section data-part="3">
+  <h2>Best-of-N &amp; Process Reward Model</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 440 280" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah-bon" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+          </defs>
+          <!-- N solutions -->
+          <rect x="10" y="10" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="28" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 1</text>
+          <rect x="10" y="42" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="50" y="60" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 2</text>
+          <rect x="10" y="74" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="92" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 3</text>
+          <rect x="10" y="106" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+          <text x="50" y="124" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 4</text>
+          <rect x="10" y="138" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="156" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 5</text>
+
+          <!-- Arrow to Verifier -->
+          <line x1="95" y1="90" x2="140" y2="90" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+
+          <!-- Verifier box -->
+          <rect x="145" y="55" width="100" height="70" rx="8" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+          <text x="195" y="78" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">Verifier</text>
+          <text x="195" y="95" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">/ RM</text>
+          <text x="195" y="115" text-anchor="middle" font-size="10" fill="#8faab0">评分 &amp; 排序</text>
+
+          <!-- Scores -->
+          <line x1="245" y1="70" x2="280" y2="30" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="30" font-size="11" fill="#8faab0">0.3</text>
+          <line x1="245" y1="80" x2="280" y2="60" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="60" font-size="11" fill="#8faab0">0.7</text>
+          <line x1="245" y1="95" x2="280" y2="100" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <text x="310" y="100" font-size="12" fill="#5ec4c4" font-weight="700">0.9 ★</text>
+          <line x1="245" y1="105" x2="280" y2="140" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="140" font-size="11" fill="#8faab0">0.4</text>
+          <line x1="245" y1="115" x2="280" y2="170" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="170" font-size="11" fill="#8faab0">0.6</text>
+
+          <!-- Best -->
+          <line x1="290" y1="100" x2="290" y2="220" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <rect x="230" y="225" width="130" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
+          <text x="295" y="247" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">选最高分 ✓</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p>Best-of-N：</p>
+      <ul style="font-size:0.88em;">
+        <li>生成 N 个候选解法</li>
+        <li>用 Reward Model 打分</li>
+        <li>选分数最高的</li>
+      </ul>
+      <div class="math-block">
+        $$E[\text{quality}] = E\!\left[\max_{i=1}^{N} f(x_i)\right]$$
+      </div>
+      <p style="margin-top:0.5em;"><span class="accent">Process Reward Model (PRM)</span>:</p>
+      <ul style="font-size:0.88em;">
+        <li>不只评估最终答案</li>
+        <li>评估<strong>每一步推理</strong>的质量</li>
+        <li>可以定位出错的步骤</li>
+        <li>OpenAI o1 的核心技术之一</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    Best-of-N 是一种更通用的"多采选优"方法。
+    <br><br>
+    看左边的流程图。生成 $5$ 个候选解法，然后交给一个 Verifier 或者 Reward Model 来打分，最后选分数最高的那个。数学上，期望的最优质量会随 $N$ 的增长而增长，当然收益也是递减的。
+    <br><br>
+    但更精细的方法是 Process Reward Model，简称 PRM。普通的 Verifier 只看最终答案对不对，而 PRM 评估推理过程中每一步的质量。它可以定位到具体哪一步出了错，从而指导搜索算法在正确的方向上探索。
+    <br><br>
+    PRM 是 OpenAI o1 模型的核心技术之一。通过评估每一步的推理质量，模型可以在思考过程中自我纠错，避免在一个错误的方向上越走越远。
+  </aside>
+</section>
+
+<!-- P3-S7: Tree of Thoughts & MCTS (PNG) -->
+<section data-part="3">
+  <h2>Tree of Thoughts &amp; MCTS</h2>
+  <div class="two-column">
+    <div>
+      <div class="img-center">
+        <img src="assets/p3-tot-mcts.png" alt="Tree of Thoughts / MCTS" style="max-height:50vh;" class="plain">
+      </div>
+    </div>
+    <div>
+      <p>从<strong>线性思考</strong>到<strong>树状搜索</strong>：</p>
+      <ul style="font-size:0.88em;">
+        <li>CoT: 一条推理路径</li>
+        <li>ToT: 多条分支 + 回溯</li>
+        <li>MCTS: AlphaGo 式搜索</li>
+      </ul>
+      <div class="math-block">
+        $$\text{UCB} = \bar{X}_j + c\sqrt{\frac{\ln N}{n_j}}$$
+      </div>
+      <ul style="font-size:0.85em;">
+        <li>$\bar{X}_j$ = 节点 $j$ 的平均奖励</li>
+        <li>$N$ = 父节点访问次数</li>
+        <li>$n_j$ = 节点 $j$ 的访问次数</li>
+        <li>$c$ = 探索-利用平衡系数</li>
+      </ul>
+      <div class="callout" style="margin-top:0.3em;">
+        <p style="margin:0; font-size:0.85em;">UCB 保证：<span class="accent">探索</span>未知路径 + <span class="accent">利用</span>已知好路径</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Tree of Thoughts 将推理从线性的 CoT 升级为树状搜索。
+    <br><br>
+    CoT 是一条路走到黑。Tree of Thoughts 允许在每一步分支出多个候选思路，评估后选择最有希望的继续探索，不行的就回溯。MCTS，也就是蒙特卡洛树搜索，来自 AlphaGo，核心用 UCB 公式来平衡探索和利用。
+    <br><br>
+    大家看这个 UCB 公式。$\bar{X}_j$ 是节点 $j$ 的平均奖励，越高说明这条路越好。但后面这一项中，大 $N$ 是父节点的访问次数，小 $n_j$ 是当前节点的访问次数。如果一个节点被访问得很少，这一项就会很大，给它更多被选择的机会。这就是"探索"——避免错过潜在的好路径。
+    <br><br>
+    实际效果是：在数学推理、编程等复杂任务上，Tree of Thoughts 显著优于简单的 CoT，因为复杂问题往往需要试错和回溯。
+  </aside>
+</section>
+
+<!-- P3-S8: OpenAI o1/o3 -->
+<section data-part="3">
+  <h2>OpenAI o1/o3：Test-Time Compute 的工业实践</h2>
+  <div style="display:flex; gap:1.2em;">
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-seafoam);">
+        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">o1 的核心思路</div>
+        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
+          <li>训练模型"学会思考"（强化学习训练推理策略）</li>
+          <li>推理时自动进行多步推理 + 自我验证</li>
+          <li>内置 hidden CoT（思考过程对用户不可见）</li>
+          <li>在数学/编程/科学推理上大幅超越 GPT-4</li>
+        </ul>
+      </div>
+    </div>
+    <div style="flex:1;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">关键洞察</div>
+        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
+          <li>不是让模型更大，而是让模型<strong>思考更久</strong></li>
+          <li>推理计算量可动态调整（简单问题少想，难题多想）</li>
+          <li>o3 在 ARC-AGI 基准上达到人类水平</li>
+          <li>验证了 inference-time scaling 的有效性</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1em; text-align:center;">
+    <p style="margin:0; font-size:1.05em;">o1/o3 证明：<span class="accent">推理时的计算扩展</span>是提升 LLM 能力的新维度，与模型规模扩展互补。</p>
+  </div>
+  <aside class="notes">
+    OpenAI 的 o1 和 o3 模型是 Inference-Time Scaling 最著名的工业实践。
+    <br><br>
+    左栏总结了 o1 的核心思路。它用强化学习训练模型"学会思考"——也就是自动进行多步推理、自我验证和纠错。推理时，模型会先生成一段 Hidden Chain of Thought，对用户不可见，然后给出最终答案。
+    <br><br>
+    右栏的关键洞察是：o1 不是让模型更大，而是让模型思考更久。推理计算量可以动态调整——简单问题少想一会儿，难题多想一会儿。o3 在 ARC-AGI 基准测试上达到了人类水平，这个测试被认为是通用人工智能的门槛测试之一。
+    <br><br>
+    这验证了 Inference-Time Scaling 的有效性：不一定要更大的模型，让模型思考更久也能达到更好的效果。
+  </aside>
+</section>
+
+<!-- P3-S9: Inference Scaling Laws (图表) -->
+<section data-part="3">
+  <h2>Inference Scaling Laws</h2>
+  <div class="two-column">
+    <div>
+      <p>核心发现：</p>
+      <div class="math-block">
+        $$\text{Performance} \propto \log(\text{Inference FLOPs})$$
+      </div>
+      <ul style="font-size:0.88em;">
+        <li>推理计算量与性能呈<span class="accent">对数线性关系</span></li>
+        <li>与训练 scaling law 形式类似（$\text{Loss} \propto \log(\text{Compute})$）</li>
+        <li><strong>小模型 + 更多推理计算</strong> 可以匹配大模型的性能</li>
+        <li>存在"计算最优"的分配策略</li>
+      </ul>
+      <div class="callout" style="margin-top:0.4em;">
+        <div class="callout-title">实践意义</div>
+        <p style="margin:0; font-size:0.85em;">不一定需要训练更大的模型。对于单个困难问题，增加推理计算（更多采样、搜索）可以显著提升准确率。</p>
+      </div>
+    </div>
+    <div>
+      <div class="img-center">
+        <img src="assets/chart-scaling-law.png" alt="Inference Scaling Law" style="max-height:48vh;" class="plain">
+      </div>
+      <p class="dim" style="font-size:0.75em; text-align:center;">（定性示意图，趋势参考 Snell et al. "Scaling LLM Test-Time Compute" 2024，具体数值为模拟）</p>
+    </div>
+  </div>
+  <aside class="notes">
+    最后来看 Inference Scaling Laws。
+    <br><br>
+    核心发现是：推理计算量与模型性能呈对数线性关系，形式上和训练时的 Scaling Law 非常类似。看右边的图：横轴是推理计算量的对数，纵轴是准确率，基本上是一条直线。
+    <br><br>
+    更有趣的发现是：一个 $7\text{B}$ 的小模型，如果分配更多的推理计算，比如 $64$ 次采样加验证，可以达到 $70\text{B}$ 大模型单次推理的性能。这意味着：对于单个困难问题，用小模型多算几次可能比用大模型算一次更划算——更快也更省资源。
+    <br><br>
+    当然，这也提示了一个计算最优的分配问题：给定固定的总预算，应该花多少在训练上、多少在推理上？这是一个活跃的研究方向。
+  </aside>
+</section>
+
+<!-- P3-S10: 全课总结 & Q&A (PNG) -->
+<section data-part="3">
+  <h2>全课总结</h2>
+  <div class="img-center">
+    <img src="assets/p3-summary.png" alt="课程总结" style="max-height:48vh;">
+  </div>
+  <div style="margin-top:0.6em; font-size:0.95em;">
+    <p style="margin:0.4em 0;">Part 1: 推理基础 — <span class="accent">理解</span>推理流程和瓶颈 (Transformer, 自回归, KV Cache)</p>
+    <p style="margin:0.4em 0;">Part 2: 推理加速 — <span class="accent">优化</span>推理效率 (Speculative Decoding, 量化, Flash Attention)</p>
+    <p style="margin:0.4em 0;">Part 3: 推理扩展 — <span class="accent">扩展</span>推理计算 (CoT, Self-Consistency, MCTS, Scaling Laws)</p>
+  </div>
+  <div style="margin-top:0.8em; text-align:center;">
+    <p style="font-size:0.9em; color:var(--ocean-mist);">Q&A 欢迎提问</p>
+  </div>
+  <aside class="notes">
+    到这里我们全部三部分的内容就讲完了，来做一个全课总结。
+    <br><br>
+    Part 1：我们理解了 Transformer 推理的基本流程——自回归生成、KV Cache、以及推理瓶颈分析。
+    <br><br>
+    Part 2：学习了加速推理的关键技术——Speculative Decoding、量化、Flash Attention、PagedAttention。
+    <br><br>
+    Part 3：探索了推理时扩展的新范式——CoT、Self-Consistency、Tree of Thoughts、MCTS，以及 Inference Scaling Laws。
+    <br><br>
+    核心信息是：大语言模型的推理不仅是一个工程问题。通过投入更多推理计算，可以显著提升输出质量。这是 LLM 发展的一个新方向。
+    <br><br>
+    以上就是今天的全部内容，参考文献见附录。现在进入 Q&A 环节，欢迎大家提问。
+  </aside>
+</section>
