@@ -3,14 +3,45 @@
      主讲人 C · ~15 min · 10 slides
      ═══════════════════════════════════════════════════════════════ -->
 
+<style>
+/* Part 3: 标题固定顶部，内容垂直居中 */
+.reveal .slides section[data-part="3"] {
+  top: 0 !important;
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+}
+.reveal .slides section[data-part="3"] > h2 {
+  flex-shrink: 0;
+}
+.reveal .slides section[data-part="3"] > .slide-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+</style>
+
 <!-- P3-S1: 核心思想 (PNG 大图) -->
 <section data-part="3">
   <h2>两种 Scaling 范式</h2>
-  <div class="img-center">
-    <img src="assets/p3-two-scaling.png" alt="Training Scaling vs Inference Scaling" style="max-height:55vh;">
+  <div class="slide-body">
+  <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-seafoam); border-radius:0 6px 6px 0; padding:0.55em 1.1em; margin:0 0 0.7em; font-size:0.88em; line-height:1.65;">
+    前两部分聚焦<span class="accent">加快</span>单次推理。<br>本部分换一个视角：若愿意在推理时<span class="accent">多花计算</span>，能否换取更好的输出？
   </div>
-  <div class="callout" style="text-align:center; margin-top:0.3em;">
-    <p style="margin:0; font-size:0.92em;">训练 Scaling（更大模型）vs 推理 Scaling（更多思考）— 两种提升性能的方式</p>
+  <div class="img-center">
+    <img src="assets/p3-two-scaling.png" alt="Training Scaling vs Inference Scaling" style="max-height:48vh;">
+  </div>
+  <div style="display:flex; gap:1em; margin-top:0.8em;">
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-teal); border-radius:6px; padding:0.55em 0.85em;">
+      <div style="color:var(--ocean-teal); font-weight:700; font-size:0.82em; margin-bottom:0.15em;">训练 Scaling</div>
+      <div style="font-size:0.78em; line-height:1.5;">更大模型 &middot; 更多数据 &middot; 更多训练算力<br><span class="dim">成本一次性，上线后固定</span></div>
+    </div>
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-seafoam); border-radius:6px; padding:0.55em 0.85em;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.82em; margin-bottom:0.15em;">推理 Scaling</div>
+      <div style="font-size:0.78em; line-height:1.5;">多步思考 &middot; 多次采样 &middot; 搜索 / 验证<br><span class="dim">模型不变，按需加码</span></div>
+    </div>
+  </div>
   </div>
   <aside class="notes">
     大家好。前两部分我们关注的是如何让推理更快。现在换一个视角：如果我们愿意在推理时花费更多的计算，能否得到更好的结果？这就是 Inference-Time Scaling 的核心思想。
@@ -23,123 +54,124 @@
   </aside>
 </section>
 
-<!-- P3-S2: Chain-of-Thought (HTML/CSS 文字排版) -->
+<!-- P3-S2 (merged): Chain-of-Thought — 概念 + 数学直觉 -->
 <section data-part="3">
   <h2>Chain-of-Thought (CoT)</h2>
-  <div style="display:flex; gap:1.2em; margin-top:0.3em;">
-    <!-- Without CoT -->
-    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #e09060;">
-      <div style="color:#e09060; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">❌ 直接回答</div>
-      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
-        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> 一个餐厅有 23 张桌子。每张桌子有 4 把椅子。今天午餐时有 14 张桌子坐了 3 人，5 张桌子坐了 4 人，其余空着。餐厅里有多少人？</p>
-        <p style="margin:0.5em 0 0; color:#e09060;"><strong>A:</strong> 62 人</p>
-        <p style="margin:0.2em 0 0; color:#8faab0; font-size:0.88em;">（一步跳到答案，容易出错）</p>
-      </div>
-    </div>
-    <!-- With CoT -->
-    <div style="flex:1; background:var(--ocean-mid); border-radius:8px; padding:0.9em; border-top:3px solid #5ec4c4;">
-      <div style="color:#5ec4c4; font-weight:700; font-size:0.95em; margin-bottom:0.5em;">✅ 分步推理 (CoT)</div>
-      <div style="background:var(--ocean-abyss); border-radius:6px; padding:0.8em; font-size:0.88em; line-height:1.6;">
-        <p style="margin:0;"><strong style="color:#a8dadc;">Q:</strong> （同上）</p>
-        <p style="margin:0.4em 0 0;"><strong style="color:#5ec4c4;">A:</strong> 让我一步步来：</p>
-        <p style="margin:0.2em 0 0; padding-left:0.8em;">1) $14 \times 3 = 42$ 人</p>
-        <p style="margin:0.1em 0 0; padding-left:0.8em;">2) $5 \times 4 = 20$ 人</p>
-        <p style="margin:0.1em 0 0; padding-left:0.8em;">3) 其余 $23-14-5=4$ 张桌子空着</p>
-        <p style="margin:0.1em 0 0; padding-left:0.8em;">4) 总人数 $=42+20=62$ 人</p>
-      </div>
-    </div>
+  <div class="slide-body">
+  <!-- Intro -->
+  <div style="background:var(--ocean-mid); border-left:3px solid #5ec4c4; border-radius:0 6px 6px 0; padding:0.5em 1em; margin:0 0 0.55em; font-size:0.82em; line-height:1.55;">
+    <strong style="color:#5ec4c4;">CoT</strong>（思维链）— 不直接给答案，而是引导模型<span class="accent">逐步推理</span>：把一步复杂映射分解为多步简单映射，用更多计算换更高准确率。
   </div>
-  <aside class="notes">
-    最简单的推理 Scaling 方法就是 Chain-of-Thought，也就是思维链。
-    <br><br>
-    请看屏幕上的对比。左边是直接回答：模型看到问题后，一步就给出答案 62 人。问题是，模型要在"脑子里"一步完成所有计算，很容易出错。
-    <br><br>
-    右边是使用 CoT 的方式：模型说"让我一步步来"，然后一步步列出计算过程——14 乘以 3 等于 42 人，5 乘以 4 等于 20 人，剩下 4 张桌子空着，总共 42 加 20 等于 62 人。
-    <br><br>
-    两种方式得到的答案一样，但 CoT 的每一步都很简单，不容易出错。而没有 CoT 时，模型需要一步映射，中间任何计算错误都无法纠正。
-    <br><br>
-    CoT 的关键洞察是：将一个复杂问题分解成多个简单步骤。每步只消耗少量推理计算，但总计算量增加了。这就是"用更多推理计算换更好结果"的最简单形式。
-  </aside>
-</section>
-
-<!-- P3-S3: CoT 为什么有效 -->
-<section data-part="3">
-  <h2>CoT 为什么有效？— 数学直觉</h2>
-  <div class="two-column">
-    <div>
-      <p>直接回答 vs 分步推理：</p>
-      <div class="math-block">
-        $$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$$
-      </div>
-      <ul style="font-size:0.88em;">
-        <li>$q$ = 问题，$a$ = 答案，$c$ = 中间推理步骤</li>
-        <li>直接回答需要模型<span class="accent">一步</span>映射 $q \to a$</li>
-        <li>CoT 引入中间变量 $c$，将一步分解为<span class="accent">多步</span></li>
-        <li>每步更简单 $\to$ 出错概率更低</li>
-      </ul>
-      <div class="callout" style="margin-top:0.5em;">
-        <div class="callout-title">Circuit Complexity 视角</div>
-        <p style="margin:0; font-size:0.85em;">CoT 等价于增加神经网络的"计算深度"。更深的网络能表达更复杂的函数。每个推理步骤 $\approx$ 网络多一层。</p>
-      </div>
-    </div>
-    <div>
-      <div class="diagram">
-        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+  <!-- Core formula -->
+  <div class="math-block" style="margin:0 0 0.1em;">
+    $$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$$
+  </div>
+  <p class="dim" style="font-size:0.7em; text-align:center; margin:0 0 0.65em;">
+    <em style="color:var(--ocean-seafoam); font-style:italic;">q</em>=问题，
+    <em style="color:var(--ocean-seafoam); font-style:italic;">a</em>=答案，
+    <em style="color:var(--ocean-seafoam); font-style:italic;">c</em>=中间推理步骤
+    &nbsp;—&nbsp; 引入 <em style="color:var(--ocean-seafoam); font-style:italic;">c</em> 把一步映射拆成多步
+  </p>
+  <!-- Two-column: SVG depth diagram | simplified example + circuit complexity -->
+  <div class="two-column" style="align-items:center; gap:1.2em;">
+    <div style="flex:1.3;">
+      <div class="diagram" style="margin:0;">
+        <svg viewBox="0 0 500 240" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
           <defs>
-            <marker id="ah-p3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            <marker id="ah-p3d" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#e09060"/>
+            </marker>
+            <marker id="ah-p3c" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#5ec4c4"/>
             </marker>
           </defs>
-          <!-- Direct -->
-          <rect x="20" y="30" width="80" height="40" rx="6" class="box"/>
-          <foreignObject x="20" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
-          <line x1="100" y1="50" x2="130" y2="50" stroke="#e09060" stroke-width="3" marker-end="url(#ah-p3)"/>
-          <text x="115" y="40" text-anchor="middle" font-size="10" fill="#e09060">1步</text>
-          <rect x="135" y="30" width="80" height="40" rx="6" fill="#223044" stroke="#e09060" stroke-width="2"/>
-          <foreignObject x="135" y="35" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">Answer $a$</div></foreignObject>
-          <foreignObject x="120" y="80" width="110" height="16"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#e09060;text-align:center;line-height:16px;">深度 $=1$ 层</div></foreignObject>
+          <!-- Direct path background -->
+          <rect x="4" y="4" width="492" height="92" rx="10" fill="rgba(224,144,96,0.06)" stroke="rgba(224,144,96,0.2)" stroke-width="1"/>
+          <text x="16" y="26" font-size="13" fill="#e09060" font-weight="700">&#x2717; 直接回答</text>
+          <text x="484" y="26" text-anchor="end" font-size="11" fill="#e09060" opacity="0.85">深度 = 1 层</text>
+          <rect x="16" y="38" width="66" height="38" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
+          <text x="49" y="62" text-anchor="middle" font-size="15" fill="#f1faee" font-style="italic">q</text>
+          <line x1="82" y1="57" x2="368" y2="57" stroke="#e09060" stroke-width="3" stroke-dasharray="10 5" marker-end="url(#ah-p3d)"/>
+          <text x="225" y="50" text-anchor="middle" font-size="12" fill="#e09060">一步映射（复杂函数）</text>
+          <rect x="378" y="38" width="80" height="38" rx="8" fill="#223044" stroke="#e09060" stroke-width="2"/>
+          <text x="418" y="62" text-anchor="middle" font-size="15" fill="#e09060" font-style="italic">a</text>
 
-          <!-- CoT -->
-          <rect x="20" y="120" width="80" height="40" rx="6" class="box"/>
-          <foreignObject x="20" y="125" width="80" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#f1faee;text-align:center;line-height:30px;">Question $q$</div></foreignObject>
-          <line x1="100" y1="140" x2="130" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
-
-          <rect x="135" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-          <foreignObject x="135" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_1$</div></foreignObject>
-          <line x1="205" y1="140" x2="225" y2="140" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
-
-          <rect x="230" y="120" width="70" height="40" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-          <foreignObject x="230" y="126" width="70" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;color:#5ec4c4;text-align:center;line-height:30px;">Step $c_2$</div></foreignObject>
-          <line x1="265" y1="160" x2="265" y2="180" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3)"/>
-
-          <rect x="230" y="185" width="70" height="30" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
-          <text x="265" y="205" text-anchor="middle" font-size="12" fill="#2d8b8b">...</text>
-          <line x1="230" y1="200" x2="200" y2="200" stroke="#2d8b8b" stroke-width="2" marker-end="url(#ah-p3)"/>
-
-          <rect x="110" y="185" width="90" height="30" rx="6" fill="#2d8b8b" stroke="none"/>
-          <foreignObject x="110" y="190" width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#1a2332;text-align:center;line-height:24px;font-weight:700;">Answer $a$</div></foreignObject>
-
-          <foreignObject x="110" y="222" width="130" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#5ec4c4;text-align:center;line-height:20px;">深度 $=T$ 层（$T$步推理）</div></foreignObject>
+          <!-- CoT path background -->
+          <rect x="4" y="108" width="492" height="128" rx="10" fill="rgba(94,196,196,0.06)" stroke="rgba(94,196,196,0.2)" stroke-width="1"/>
+          <text x="16" y="130" font-size="13" fill="#5ec4c4" font-weight="700">&#x2713; CoT 分步推理</text>
+          <text x="484" y="130" text-anchor="end" font-size="11" fill="#5ec4c4" opacity="0.85">深度 = T 层</text>
+          <rect x="16" y="144" width="66" height="38" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
+          <text x="49" y="168" text-anchor="middle" font-size="15" fill="#f1faee" font-style="italic">q</text>
+          <line x1="82" y1="163" x2="117" y2="163" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3c)"/>
+          <rect x="125" y="144" width="56" height="38" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="153" y="167" text-anchor="middle" font-size="13" fill="#5ec4c4">c&#x2081;</text>
+          <line x1="181" y1="163" x2="210" y2="163" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3c)"/>
+          <rect x="218" y="144" width="56" height="38" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="246" y="167" text-anchor="middle" font-size="13" fill="#5ec4c4">c&#x2082;</text>
+          <line x1="274" y1="163" x2="300" y2="163" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3c)"/>
+          <text x="321" y="169" text-anchor="middle" font-size="18" fill="#2d8b8b" font-weight="700">&#x22EF;</text>
+          <line x1="340" y1="163" x2="370" y2="163" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-p3c)"/>
+          <rect x="378" y="144" width="80" height="38" rx="8" fill="#2d8b8b" stroke="none"/>
+          <text x="418" y="168" text-anchor="middle" font-size="15" fill="#1a2332" font-weight="700" font-style="italic">a</text>
+          <text x="49" y="198" text-anchor="middle" font-size="10" fill="#5ec4c4" opacity="0.75">问题</text>
+          <text x="153" y="198" text-anchor="middle" font-size="10" fill="#5ec4c4" opacity="0.75">简单步</text>
+          <text x="246" y="198" text-anchor="middle" font-size="10" fill="#5ec4c4" opacity="0.75">简单步</text>
+          <text x="418" y="198" text-anchor="middle" font-size="10" fill="#5ec4c4" opacity="0.75">答案</text>
+          <text x="237" y="223" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="600">每步都简单 &#x2192; 总出错率低</text>
         </svg>
       </div>
     </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:0.7em;">
+      <!-- Simplified example -->
+      <div style="background:var(--ocean-mid); border-radius:6px; padding:0.75em 1em; font-size:0.85em; line-height:1.6;">
+        <p style="margin:0 0 0.55em;"><strong style="color:#a8dadc;">Q:</strong> 23 张桌子每张 4 把椅子；14 张坐 3 人、5 张坐 4 人，其余空着，共几人？</p>
+        <div style="display:flex; gap:0.55em; align-items:stretch;">
+          <div style="flex:1; background:var(--ocean-abyss); border-left:3px solid #e09060; padding:0.6em 0.75em; border-radius:3px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="color:#e09060; font-size:0.92em; font-weight:700;">&#x2717; 直接回答</div>
+            <div style="font-size:1.7em; color:#e09060; font-weight:700; line-height:1; margin:0.25em 0 0.2em;">82</div>
+            <div style="color:#8faab0; font-size:0.76em; line-height:1.4;">一步跳到答案，易出错</div>
+          </div>
+          <div style="flex:1.45; background:var(--ocean-abyss); border-left:3px solid #5ec4c4; padding:0.6em 0.75em; border-radius:3px;">
+            <div style="color:#5ec4c4; font-size:0.92em; font-weight:700; margin-bottom:0.35em;">&#x2713; CoT 分步</div>
+            <div style="font-size:0.88em; line-height:1.75;">
+              1) $14\times3=42$<br>
+              2) $5\times4=20$<br>
+              3) $42+20=$ <strong style="color:#5ec4c4; font-size:1.15em;">62</strong> &#x2713;
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Circuit Complexity -->
+      <div class="callout" style="margin:0; padding:0.7em 1em;">
+        <div class="callout-title" style="font-size:0.9em;">Circuit Complexity 视角</div>
+        <p style="margin:0.25em 0 0; font-size:0.8em; line-height:1.6;">CoT 等价于增加<span class="accent">计算深度</span>；每步 &asymp; 网络多一层 &rarr; 可表达更复杂的函数。</p>
+      </div>
+    </div>
+  </div>
   </div>
   <aside class="notes">
-    CoT 为什么有效？我们可以从数学角度来理解。
+    CoT 是最简单的推理 Scaling 方法：不让模型直接给答案，而是引导它逐步推理，用更多计算换准确率。
     <br><br>
-    请看左边这个公式。$P(a \mid q) = \sum_{c} P(a \mid c, q) \cdot P(c \mid q)$，直接回答时，模型要一步从问题 $q$ 映射到答案 $a$，这是一个很复杂的函数。引入 CoT 后，我们把这个映射分解为多步：$q \to c_1 \to c_2 \to \cdots \to a$。每一步都是一个更简单的函数，出错的概率更低。
+    数学上，CoT 引入中间步骤 $c$：$P(a \mid q) = \sum_c P(a \mid c, q) \cdot P(c \mid q)$——把原本一步复杂映射拆成多步简单映射。
     <br><br>
-    右边用图来直观展示。上面一行是直接回答，只有一层"网络深度"。下面一行是 CoT，有多步推理，相当于网络有 $T$ 层。
+    看左边这张图：上面一行是直接回答，从 $q$ 一步到 $a$，深度 = 1；下面是 CoT，$q \to c_1 \to c_2 \to \cdots \to a$，深度 = $T$。每一步都很简单，总出错率就低。
     <br><br>
-    这就引出了 Circuit Complexity 的视角：CoT 本质上增加了神经网络的"计算深度"。理论上有一些问题，浅层网络需要指数级的宽度才能解决，但深层网络可以高效处理。CoT 让模型在推理时获得了额外的深度，这就是 Inference-Time Compute 的本质。
+    右上是个餐厅桌椅题做具体示范：直接回答得到 82，是错的；用 CoT 分步：$14 \times 3 = 42$ 人、$5 \times 4 = 20$ 人，加起来 $62$ 人，正确。因为每一步都是个位数乘法或加法，模型不容易出错。
+    <br><br>
+    右下是 Circuit Complexity 视角：CoT 本质上增加了神经网络的"计算深度"。理论上有一些问题浅层网络需要指数级宽度才能解决，而深层网络可以高效处理。每个推理步骤就相当于给网络多加了一层。这就是 Inference-Time Compute 的本质——用推理时的深度换表达能力。
   </aside>
 </section>
 
 <!-- P3-S4: Self-Consistency (SVG) -->
 <section data-part="3">
   <h2>Self-Consistency：多次采样 + 多数投票</h2>
-  <div class="diagram">
-    <svg viewBox="0 0 800 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+  <div class="slide-body">
+  <div style="border-left:3px solid var(--ocean-teal); background:var(--ocean-mid); padding:0.55em 0.9em; margin-bottom:0.9em; font-size:0.82em; line-height:1.45;">
+    <strong style="color:var(--ocean-seafoam;">核心思想：</strong>CoT 只走一条路；Self-Consistency 同一问题采样 <em style="color:var(--ocean-seafoam);">N</em> 条不同的推理路径，对<strong style="color:var(--ocean-seafoam);">答案</strong>做多数投票。
+    <span style="color:var(--ocean-mist);">正确推理可殊途同归，错误推理随机分散。</span>
+  </div>
+  <div class="diagram" style="margin-bottom:0.9em;">
+    <svg viewBox="0 0 800 340" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
       <defs>
         <marker id="ah-sc" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
@@ -147,57 +179,74 @@
       </defs>
 
       <!-- Question -->
-      <rect x="250" y="10" width="300" height="40" rx="8" fill="#2d8b8b" stroke="none"/>
-      <foreignObject x="250" y="10" width="300" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:14px;color:#1a2332;text-align:center;line-height:30px;font-weight:700;">同一个问题，采样 $N\!=\!5$ 次</div></foreignObject>
+      <rect x="230" y="8" width="340" height="44" rx="8" fill="#2d8b8b" stroke="none"/>
+      <text x="400" y="35" text-anchor="middle" font-size="16" fill="#1a2332" font-weight="700">同一个问题，采样 N = 5 次</text>
 
-      <!-- 5 paths -->
+      <!-- 5 paths: uniform spacing — rect width=140, gap=15px — centers at 100, 250, 400, 550, 700 -->
+      <!-- Rect x positions: 30, 180, 330, 480, 630 (width 140 each) -->
+      <!-- Funnel arrows all originate from question bottom center (400,52), symmetric -->
+
       <!-- Path 1 -->
-      <line x1="310" y1="50" x2="100" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <rect x="30" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-      <text x="100" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 1</text>
-      <text x="100" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+      <line x1="400" y1="52" x2="100" y2="92" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="30" y="98" width="140" height="62" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+      <text x="100" y="120" text-anchor="middle" font-size="13" fill="#5ec4c4">推理路径 1</text>
+      <text x="100" y="145" text-anchor="middle" font-size="16" fill="#a8dadc" font-weight="700">答案: 62</text>
 
       <!-- Path 2 -->
-      <line x1="350" y1="50" x2="250" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <rect x="180" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
-      <text x="250" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 2</text>
-      <text x="250" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+      <line x1="400" y1="52" x2="250" y2="92" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="180" y="98" width="140" height="62" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="250" y="120" text-anchor="middle" font-size="13" fill="#2d8b8b">推理路径 2</text>
+      <text x="250" y="145" text-anchor="middle" font-size="16" fill="#a8dadc" font-weight="700">答案: 62</text>
 
-      <!-- Path 3 -->
-      <line x1="400" y1="50" x2="400" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <rect x="330" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-      <text x="400" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 3</text>
-      <text x="400" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 58</text>
+      <!-- Path 3 (minority) -->
+      <line x1="400" y1="52" x2="400" y2="92" stroke="#e09060" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="330" y="98" width="140" height="62" rx="6" fill="#223044" stroke="#e09060" stroke-width="1.5"/>
+      <text x="400" y="120" text-anchor="middle" font-size="13" fill="#e09060">推理路径 3</text>
+      <text x="400" y="145" text-anchor="middle" font-size="16" fill="#f2a56a" font-weight="700">答案: 58</text>
 
       <!-- Path 4 -->
-      <line x1="450" y1="50" x2="550" y2="90" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <rect x="480" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
-      <text x="550" y="115" text-anchor="middle" font-size="11" fill="#2d8b8b">推理路径 4</text>
-      <text x="550" y="135" text-anchor="middle" font-size="13" fill="#a8dadc" font-weight="700">答案: 62</text>
+      <line x1="400" y1="52" x2="550" y2="92" stroke="#2d8b8b" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="480" y="98" width="140" height="62" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
+      <text x="550" y="120" text-anchor="middle" font-size="13" fill="#2d8b8b">推理路径 4</text>
+      <text x="550" y="145" text-anchor="middle" font-size="16" fill="#a8dadc" font-weight="700">答案: 62</text>
 
-      <!-- Path 5 -->
-      <line x1="490" y1="50" x2="700" y2="90" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <rect x="630" y="95" width="140" height="55" rx="6" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-      <text x="700" y="115" text-anchor="middle" font-size="11" fill="#5ec4c4">推理路径 5</text>
-      <text x="700" y="135" text-anchor="middle" font-size="13" fill="#e09060" font-weight="700">答案: 65</text>
+      <!-- Path 5 (minority) -->
+      <line x1="400" y1="52" x2="700" y2="92" stroke="#e09060" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <rect x="630" y="98" width="140" height="62" rx="6" fill="#223044" stroke="#e09060" stroke-width="1.5"/>
+      <text x="700" y="120" text-anchor="middle" font-size="13" fill="#e09060">推理路径 5</text>
+      <text x="700" y="145" text-anchor="middle" font-size="16" fill="#f2a56a" font-weight="700">答案: 65</text>
 
-      <!-- Arrows to vote -->
-      <line x1="100" y1="150" x2="300" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <line x1="250" y1="150" x2="320" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <line x1="400" y1="150" x2="400" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
-      <line x1="550" y1="150" x2="480" y2="195" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
-      <line x1="700" y1="150" x2="500" y2="195" stroke="#8faab0" stroke-width="1" stroke-dasharray="3 2"/>
+      <!-- Arrows to vote box: all converge from each rect's bottom-center to vote box top -->
+      <!-- Vote box spans x=215..585 at y=215 → top edge at y=215, center x=400 -->
+      <!-- Entry points evenly distributed: 280, 340, 400, 460, 520 -->
+      <line x1="100" y1="160" x2="280" y2="213" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="250" y1="160" x2="340" y2="213" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="400" y1="160" x2="400" y2="213" stroke="#8faab0" stroke-width="1.2" stroke-dasharray="3 2" marker-end="url(#ah-sc)"/>
+      <line x1="550" y1="160" x2="460" y2="213" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-sc)"/>
+      <line x1="700" y1="160" x2="520" y2="213" stroke="#8faab0" stroke-width="1.2" stroke-dasharray="3 2" marker-end="url(#ah-sc)"/>
 
       <!-- Vote box -->
-      <rect x="230" y="200" width="340" height="50" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
-      <text x="400" y="220" text-anchor="middle" font-size="13" fill="#a8dadc">多数投票 (Majority Vote)</text>
-      <text x="400" y="240" text-anchor="middle" font-size="14" fill="#a8dadc">62: <tspan fill="#5ec4c4" font-weight="700">3票</tspan> · 58: <tspan fill="#e09060">1票</tspan> · 65: <tspan fill="#e09060">1票</tspan></text>
+      <rect x="215" y="215" width="370" height="62" rx="8" fill="#223044" stroke="#a8dadc" stroke-width="1.5"/>
+      <text x="400" y="237" text-anchor="middle" font-size="15" fill="#a8dadc" font-weight="600">多数投票 (Majority Vote)</text>
+      <text x="400" y="262" text-anchor="middle" font-size="16" fill="#a8dadc">62: <tspan fill="#5ec4c4" font-weight="700">3 票</tspan>  ·  58: <tspan fill="#f2a56a">1 票</tspan>  ·  65: <tspan fill="#f2a56a">1 票</tspan></text>
 
       <!-- Result -->
-      <line x1="400" y1="250" x2="400" y2="275" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-sc)"/>
-      <rect x="325" y="280" width="150" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
-      <text x="400" y="302" text-anchor="middle" font-size="15" fill="#1a2332" font-weight="700">最终答案: 62 ✓</text>
+      <line x1="400" y1="277" x2="400" y2="298" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-sc)"/>
+      <rect x="310" y="300" width="180" height="38" rx="8" fill="#2d8b8b" stroke="none"/>
+      <text x="400" y="325" text-anchor="middle" font-size="17" fill="#1a2332" font-weight="700">最终答案: 62 ✓</text>
     </svg>
+  </div>
+  <div style="display:flex; gap:1em; justify-content:space-between; font-size:0.75em;">
+    <div style="flex:1; background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.45em 0.7em; border-radius:4px;">
+      <strong style="color:var(--ocean-seafoam);">代价</strong><br><span style="color:var(--ocean-mist);">N 倍推理计算（此例 5&times;）</span>
+    </div>
+    <div style="flex:1; background:var(--ocean-mid); border-left:3px solid #5ec4c4; padding:0.45em 0.7em; border-radius:4px;">
+      <strong style="color:var(--ocean-seafoam);">收益</strong><br><span style="color:var(--ocean-mist);">准确率显著提升（下页数据）</span>
+    </div>
+    <div style="flex:1; background:var(--ocean-mid); border-left:3px solid #a8dadc; padding:0.45em 0.7em; border-radius:4px;">
+      <strong style="color:var(--ocean-seafoam);">本质</strong><br><span style="color:var(--ocean-mist);">用更多推理计算换取更好结果</span>
+    </div>
+  </div>
   </div>
   <aside class="notes">
     CoT 是一条推理路径。Self-Consistency 是它的自然延伸：不只做一次推理，而是采样多次。
@@ -213,28 +262,65 @@
 <!-- P3-S5: Self-Consistency 投票效果分析 -->
 <section data-part="3">
   <h2>Self-Consistency：投票效果分析</h2>
-  <div class="two-column">
+  <div class="slide-body">
+  <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); border-radius:0 6px 6px 0; padding:0.5em 1em; margin:0 0 1.2em; font-size:0.88em; line-height:1.6;">
+    以 <strong style="color:var(--ocean-seafoam);">LLaMA-2-70B</strong> 在 GSM8K 数学推理基准为例，<br>单次 CoT 准确率 <em style="color:var(--ocean-seafoam);">p</em> = 57%，通过多数投票能提升多少？
+  </div>
+  <div class="two-column" style="align-items:center;">
     <div>
       <div class="img-center">
-        <img src="assets/chart-self-consistency-voting.png" alt="Self-Consistency 投票效果" style="max-height:48vh;" class="plain">
+        <img src="assets/chart-self-consistency-voting.png" alt="Self-Consistency 投票效果" style="max-height:52vh;" class="plain">
       </div>
-      <p class="dim" style="font-size:0.75em; text-align:center;">（图表由 Python 生成，基于二项分布模型。$p{=}0.57$ 参考 LLaMA-2-70B 在 GSM8K 上的 8-shot CoT 表现，Touvron et al. 2023）</p>
+      <p class="dim" style="font-size:0.72em; text-align:center; margin-top:0.2em;">（基于二项分布模型，<em>p</em>=0.57，参考 Touvron et al. 2023）</p>
     </div>
-    <div>
-      <ul style="font-size:0.88em;">
-        <li>单次推理准确率 $p = 57\%$（LLaMA-2-70B, GSM8K）</li>
-        <li style="margin-top:0.5em;">$N=5$: $\sim 63\%$ &nbsp; $N=11$: $\sim 68\%$</li>
-        <li style="margin-top:0.3em;">$N=21$: $\sim 74\%$ &nbsp; $N=41$: $\sim 82\%$</li>
-        <li style="margin-top:0.5em;"><strong style="color:#5ec4c4;">边际收益递减</strong>，但持续提升</li>
-      </ul>
-      <div class="callout" style="margin-top:0.8em;">
+    <div style="display:flex; flex-direction:column; justify-content:center;">
+      <!-- 数据表格 -->
+      <table style="font-size:0.85em; border-collapse:collapse; width:100%; margin-bottom:0.8em;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--ocean-teal);">
+            <th style="text-align:center; padding:0.3em 0.5em; color:var(--ocean-seafoam); font-weight:700;">采样次数 <em>N</em></th>
+            <th style="text-align:center; padding:0.3em 0.5em; color:var(--ocean-seafoam); font-weight:700;">投票准确率</th>
+            <th style="text-align:center; padding:0.3em 0.5em; color:var(--ocean-seafoam); font-weight:700;">提升</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid rgba(168,218,220,0.15);">
+            <td style="text-align:center; padding:0.3em 0.5em;">1（基线）</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:var(--ocean-mist);">57%</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:var(--ocean-mist);">—</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(168,218,220,0.15);">
+            <td style="text-align:center; padding:0.3em 0.5em;">5</td>
+            <td style="text-align:center; padding:0.3em 0.5em;">~63%</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:#5ec4c4;">+6%</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(168,218,220,0.15);">
+            <td style="text-align:center; padding:0.3em 0.5em;">11</td>
+            <td style="text-align:center; padding:0.3em 0.5em;">~68%</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:#5ec4c4;">+11%</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(168,218,220,0.15);">
+            <td style="text-align:center; padding:0.3em 0.5em;">21</td>
+            <td style="text-align:center; padding:0.3em 0.5em;">~74%</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:#5ec4c4;">+17%</td>
+          </tr>
+          <tr>
+            <td style="text-align:center; padding:0.3em 0.5em;">41</td>
+            <td style="text-align:center; padding:0.3em 0.5em; font-weight:700; color:var(--ocean-seafoam);">~82%</td>
+            <td style="text-align:center; padding:0.3em 0.5em; color:#5ec4c4; font-weight:700;">+25%</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:0.82em; margin:0 0 0.6em; text-align:center;"><strong style="color:#5ec4c4;">边际收益递减</strong>，但准确率持续提升</p>
+      <div class="callout" style="margin:0;">
         <div class="callout-title">Inference-Time Scaling 的核心直觉</div>
-        <p style="margin:0; font-size:0.85em;">
-          更多采样 $\times$ 投票 = 更可靠答案。<br>
+        <p style="margin:0; font-size:0.82em;">
+          更多采样 &times; 投票 = 更可靠答案。<br>
           计算量翻倍 → 准确率持续提升，但存在收益递减。
         </p>
       </div>
     </div>
+  </div>
   </div>
   <aside class="notes">
     上一页展示了 Self-Consistency 的原理，这页用量化数据来看投票效果。
@@ -252,193 +338,521 @@
 <!-- P3-S6: Best-of-N & Process Reward Model (SVG) -->
 <section data-part="3">
   <h2>Best-of-N &amp; Process Reward Model</h2>
-  <div class="two-column">
-    <div>
-      <div class="diagram">
-        <svg viewBox="0 0 440 280" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+  <div class="slide-body">
+  <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); border-radius:0 6px 6px 0; padding:0.5em 1em; margin:0 0 1.2em; font-size:0.88em; line-height:1.6;">
+    比"多数投票"更通用：让一个 <strong style="color:var(--ocean-seafoam);">Reward Model</strong> 来打分，<br>再从结果验证（Best-of-N）进化到过程验证（PRM）。
+  </div>
+  <div class="two-column" style="align-items:stretch; gap:2em;">
+    <div style="display:flex; flex-direction:column; justify-content:center;">
+      <div class="diagram" style="margin:0;">
+        <svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%; max-height:50vh;">
           <defs>
             <marker id="ah-bon" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
               <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
             </marker>
+            <marker id="ah-bon-best" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#5ec4c4"/>
+            </marker>
           </defs>
-          <!-- N solutions -->
-          <rect x="10" y="10" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-          <text x="50" y="28" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 1</text>
-          <rect x="10" y="42" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
-          <text x="50" y="60" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 2</text>
-          <rect x="10" y="74" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-          <text x="50" y="92" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 3</text>
-          <rect x="10" y="106" width="80" height="28" rx="4" fill="#223044" stroke="#2d8b8b" stroke-width="1.5"/>
-          <text x="50" y="124" text-anchor="middle" font-size="11" fill="#2d8b8b">解法 4</text>
-          <rect x="10" y="138" width="80" height="28" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
-          <text x="50" y="156" text-anchor="middle" font-size="11" fill="#5ec4c4">解法 5</text>
+          <!-- N solutions (unified stroke color #5ec4c4) -->
+          <rect x="10" y="10" width="80" height="26" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="27" text-anchor="middle" font-size="13" fill="#5ec4c4">解法 1</text>
+          <rect x="10" y="42" width="80" height="26" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="59" text-anchor="middle" font-size="13" fill="#5ec4c4">解法 2</text>
+          <rect x="10" y="74" width="80" height="26" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+          <text x="50" y="91" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">解法 3</text>
+          <rect x="10" y="106" width="80" height="26" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="123" text-anchor="middle" font-size="13" fill="#5ec4c4">解法 4</text>
+          <rect x="10" y="138" width="80" height="26" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="50" y="155" text-anchor="middle" font-size="13" fill="#5ec4c4">解法 5</text>
 
           <!-- Arrow to Verifier -->
-          <line x1="95" y1="90" x2="140" y2="90" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <line x1="95" y1="86" x2="140" y2="86" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
 
-          <!-- Verifier box -->
-          <rect x="145" y="55" width="100" height="70" rx="8" fill="#223044" stroke="#e0b060" stroke-width="2"/>
-          <text x="195" y="78" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">Verifier</text>
-          <text x="195" y="95" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">/ RM</text>
-          <text x="195" y="115" text-anchor="middle" font-size="10" fill="#8faab0">评分 &amp; 排序</text>
+          <!-- Verifier box (merged text to 2 lines) -->
+          <rect x="145" y="51" width="100" height="70" rx="8" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+          <text x="195" y="81" text-anchor="middle" font-size="13" fill="#e0b060" font-weight="700">Verifier / RM</text>
+          <text x="195" y="111" text-anchor="middle" font-size="12" fill="#8faab0">评分 &amp; 排序</text>
 
-          <!-- Scores -->
-          <line x1="245" y1="70" x2="280" y2="30" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
-          <text x="310" y="30" font-size="11" fill="#8faab0">0.3</text>
-          <line x1="245" y1="80" x2="280" y2="60" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
-          <text x="310" y="60" font-size="11" fill="#8faab0">0.7</text>
-          <line x1="245" y1="95" x2="280" y2="100" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
-          <text x="310" y="100" font-size="12" fill="#5ec4c4" font-weight="700">0.9 ★</text>
-          <line x1="245" y1="105" x2="280" y2="140" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
-          <text x="310" y="140" font-size="11" fill="#8faab0">0.4</text>
-          <line x1="245" y1="115" x2="280" y2="170" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
-          <text x="310" y="170" font-size="11" fill="#8faab0">0.6</text>
+          <!-- Scores with solution labels -->
+          <line x1="245" y1="66" x2="280" y2="26" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="29" font-size="13" fill="#8faab0">#1: 0.3</text>
+          <line x1="245" y1="76" x2="280" y2="56" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="59" font-size="13" fill="#8faab0">#2: 0.7</text>
+          <line x1="245" y1="91" x2="280" y2="89" stroke="#a8dadc" stroke-width="2" marker-end="url(#ah-bon)"/>
+          <text x="310" y="92" font-size="14" fill="#5ec4c4" font-weight="700">#3: 0.9 ★</text>
+          <line x1="245" y1="101" x2="280" y2="125" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="128" font-size="13" fill="#8faab0">#4: 0.4</text>
+          <line x1="245" y1="111" x2="280" y2="155" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-bon)"/>
+          <text x="310" y="158" font-size="13" fill="#8faab0">#5: 0.6</text>
 
-          <!-- Best -->
-          <line x1="290" y1="100" x2="290" y2="220" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-bon)"/>
-          <rect x="230" y="225" width="130" height="35" rx="8" fill="#2d8b8b" stroke="none"/>
-          <text x="295" y="247" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">选最高分 ✓</text>
+          <!-- Best: arrow goes horizontally rightward from winning #3 score to the capsule on the right side -->
+          <line x1="380" y1="89" x2="420" y2="89" stroke="#5ec4c4" stroke-width="2" marker-end="url(#ah-bon-best)"/>
+          <rect x="425" y="71" width="110" height="36" rx="8" fill="#2d8b8b" stroke="none"/>
+          <text x="480" y="94" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">选最高分 ✓</text>
         </svg>
       </div>
+      <p class="dim" style="font-size:0.72em; text-align:center; margin:0.4em 0 0;">Best-of-N 流程示意：N 个候选 → Verifier 打分 → 取最高分</p>
     </div>
-    <div>
-      <p>Best-of-N：</p>
-      <ul style="font-size:0.88em;">
-        <li>生成 N 个候选解法</li>
-        <li>用 Reward Model 打分</li>
-        <li>选分数最高的</li>
-      </ul>
-      <div class="math-block">
-        $$E[\text{quality}] = E\!\left[\max_{i=1}^{N} f(x_i)\right]$$
+    <div style="display:flex; flex-direction:column; justify-content:center; gap:0.8em;">
+      <!-- Best-of-N card -->
+      <div style="background:var(--ocean-mid); border-radius:6px; padding:0.7em 1em; border-left:3px solid var(--ocean-teal);">
+        <p style="margin:0 0 0.3em; font-weight:700; color:var(--ocean-seafoam); font-size:0.95em;">Best-of-N（结果验证）</p>
+        <ul style="font-size:0.85em; margin:0 0 0.4em; padding-left:1.2em;">
+          <li>生成 <em>N</em> 个候选解法</li>
+          <li>用 Reward Model 打分</li>
+          <li>选分数最高的</li>
+        </ul>
+        <p class="dim" style="font-size:0.76em; margin:0.3em 0 0.2em;">期望质量随 <em>N</em> 单调增：</p>
+        <div style="text-align:center; font-size:0.95em; margin:0;">
+          $E[\text{quality}] = E\!\left[\max_{i=1}^{N} f(x_i)\right]$
+        </div>
       </div>
-      <p style="margin-top:0.5em;"><span class="accent">Process Reward Model (PRM)</span>:</p>
-      <ul style="font-size:0.88em;">
-        <li>不只评估最终答案</li>
-        <li>评估<strong>每一步推理</strong>的质量</li>
-        <li>可以定位出错的步骤</li>
-        <li>OpenAI o1 的核心技术之一</li>
-      </ul>
+      <!-- PRM card -->
+      <div style="background:var(--ocean-mid); border-radius:6px; padding:0.7em 1em; border-left:3px solid var(--syn-operator);">
+        <p style="margin:0 0 0.3em; font-weight:700; color:var(--syn-operator); font-size:0.95em;">Process Reward Model（过程验证）</p>
+        <ul style="font-size:0.85em; margin:0; padding-left:1.2em;">
+          <li>不只评估最终答案，评估<strong>每一步推理</strong>的质量</li>
+          <li>可以定位具体出错的步骤，引导搜索方向</li>
+          <li>被推测与 OpenAI <strong style="color:var(--ocean-seafoam);">o1</strong> 的训练思路相关<br><span style="font-size:0.85em; color:var(--ocean-seafoam); opacity:0.8;">（Lightman et al., 2023, <em>Let's Verify Step by Step</em>）</span></li>
+        </ul>
+      </div>
     </div>
+  </div>
+  <div class="callout" style="margin-top:1.5em; text-align:center;">
+    <p style="margin:0; font-size:0.88em;">
+      Best-of-N 用<span class="accent">结果验证</span>选优 &nbsp;→&nbsp;
+      PRM 用<span class="accent">过程验证</span>引导搜索：从"投票"到"评分"的进化
+    </p>
+  </div>
   </div>
   <aside class="notes">
     Best-of-N 是一种更通用的"多采选优"方法。
     <br><br>
     看左边的流程图。生成 $5$ 个候选解法，然后交给一个 Verifier 或者 Reward Model 来打分，最后选分数最高的那个。数学上，期望的最优质量会随 $N$ 的增长而增长，当然收益也是递减的。
     <br><br>
-    但更精细的方法是 Process Reward Model，简称 PRM。普通的 Verifier 只看最终答案对不对，而 PRM 评估推理过程中每一步的质量。它可以定位到具体哪一步出了错，从而指导搜索算法在正确的方向上探索。
+    但更精细的方法是 Process Reward Model，简称 PRM。普通的 Verifier 只看最终答案对不对，而 PRM 评估推理过程中每一步的质量。它可以定位到具体哪一步出了错——比如假设模型在第 3 步算错了乘法，PRM 可以定位到这一步——从而指导搜索算法在正确的方向上探索。
     <br><br>
-    PRM 是 OpenAI o1 模型的核心技术之一。通过评估每一步的推理质量，模型可以在思考过程中自我纠错，避免在一个错误的方向上越走越远。
+    这里特别说明一下：OpenAI 并没有公开 o1 的技术细节，"PRM 是 o1 核心"只是业界推测，因为 OpenAI 在 2023 年发过一篇《Let's Verify Step by Step》——这篇论文在 MATH 数据集上证明了"奖励每一步推理（PRM）"比"只奖励最终答案（ORM）"效果明显更好，所以大家猜 o1 沿用了这条路线。<br><br>
+    但 o1 到底用没用 PRM 并不重要，重要的是过程监督这个思路本身——让模型在推理的每一步都能得到反馈、及时纠错，而不是等到最后才发现走错了路。
   </aside>
 </section>
 
-<!-- P3-S7: Tree of Thoughts & MCTS (PNG) -->
+<!-- P3-S7a: Tree of Thoughts -->
 <section data-part="3">
-  <h2>Tree of Thoughts &amp; MCTS</h2>
-  <div class="two-column">
-    <div>
-      <div class="img-center">
-        <img src="assets/p3-tot-mcts.png" alt="Tree of Thoughts / MCTS" style="max-height:50vh;" class="plain">
+  <h2>Tree of Thoughts (ToT)</h2>
+  <div class="slide-body">
+  <div style="border-left:3px solid var(--ocean-teal); background:var(--ocean-mid); padding:0.55em 1em; margin-bottom:0.7em; font-size:0.82em; line-height:1.55;">
+    复杂问题常需 <strong>试错 &amp; 回溯</strong>。ToT 把推理从<strong>一条路径</strong>升级为<strong>一棵搜索树</strong>：每步生成多个候选、由 LLM 自评估、通过 <span class="accent">BFS / DFS</span> 搜索最优路径。
+  </div>
+  <div class="two-column" style="align-items:stretch; gap:1.2em;">
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.9em; margin-bottom:0.35em;">ToT 四个关键组件</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5em;">
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.5em 0.75em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.82em;">① 思维分解</div>
+          <div class="dim" style="font-size:0.73em; margin-top:0.15em; line-height:1.45;">"一步"的粒度（等式 / 段落 / 单词）</div>
+        </div>
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.5em 0.75em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.82em;">② 思维生成</div>
+          <div class="dim" style="font-size:0.73em; margin-top:0.15em; line-height:1.45;">采样 / propose <em>b</em> 个候选</div>
+        </div>
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.5em 0.75em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.82em;">③ 状态评估</div>
+          <div class="dim" style="font-size:0.73em; margin-top:0.15em; line-height:1.45;">LLM 打分 <em>V(s)</em> 或投票</div>
+        </div>
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.5em 0.75em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.82em;">④ 搜索算法</div>
+          <div class="dim" style="font-size:0.73em; margin-top:0.15em; line-height:1.45;">BFS（宽度 <em>b</em>）/ DFS（含剪枝）</div>
+        </div>
       </div>
+      <div class="callout" style="margin-top:0.7em; padding:0.55em 0.9em;">
+        <p style="margin:0; font-size:0.78em; line-height:1.55;">核心创新：<strong>同一个 LLM 既当生成者，又当评判者</strong>——类似人类的<span class="accent">"内心对话"</span>。</p>
+      </div>
+      <div style="display:flex; gap:0.5em; margin-top:0.6em;">
+        <div style="flex:1; text-align:center; background:var(--ocean-mid); border-radius:4px; padding:0.4em 0.3em;">
+          <div class="dim" style="font-size:0.72em;">CoT</div>
+          <div style="color:#8faab0; font-weight:700; font-size:1.05em;">4%</div>
+        </div>
+        <div style="flex:1; text-align:center; background:var(--ocean-mid); border-radius:4px; padding:0.4em 0.3em;">
+          <div class="dim" style="font-size:0.72em;">CoT-SC (k=100)</div>
+          <div style="color:#8faab0; font-weight:700; font-size:1.05em;">9%</div>
+        </div>
+        <div style="flex:1; text-align:center; background:rgba(94,196,196,0.2); border-radius:4px; padding:0.4em 0.3em;">
+          <div class="dim" style="font-size:0.72em;">ToT (b=5)</div>
+          <div style="color:#5ec4c4; font-weight:700; font-size:1.05em;">74%</div>
+        </div>
+      </div>
+      <p class="dim" style="font-size:0.66em; text-align:center; margin:0.3em 0 0;">Game of 24 成功率（GPT-4，Yao et al. 2023）</p>
     </div>
-    <div>
-      <p>从<strong>线性思考</strong>到<strong>树状搜索</strong>：</p>
-      <ul style="font-size:0.88em;">
-        <li>CoT: 一条推理路径</li>
-        <li>ToT: 多条分支 + 回溯</li>
-        <li>MCTS: AlphaGo 式搜索</li>
-      </ul>
-      <div class="math-block">
-        $$\text{UCB} = \bar{X}_j + c\sqrt{\frac{\ln N}{n_j}}$$
-      </div>
-      <ul style="font-size:0.85em;">
-        <li>$\bar{X}_j$ = 节点 $j$ 的平均奖励</li>
-        <li>$N$ = 父节点访问次数</li>
-        <li>$n_j$ = 节点 $j$ 的访问次数</li>
-        <li>$c$ = 探索-利用平衡系数</li>
-      </ul>
-      <div class="callout" style="margin-top:0.3em;">
-        <p style="margin:0; font-size:0.85em;">UCB 保证：<span class="accent">探索</span>未知路径 + <span class="accent">利用</span>已知好路径</p>
+    <div style="flex:1.08; display:flex; flex-direction:column; justify-content:center;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.88em; margin-bottom:0.3em; text-align:center;">示例：Game of 24 — 用 {1,2,3,8} 算出 24</div>
+      <div class="diagram" style="margin:0;">
+        <svg viewBox="0 0 560 320" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <defs>
+            <marker id="ah-tot" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#a8dadc"/>
+            </marker>
+            <marker id="ah-tot-pr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#8faab0" opacity="0.5"/>
+            </marker>
+          </defs>
+          <rect x="220" y="4" width="120" height="36" rx="6" fill="#2d8b8b"/>
+          <text x="280" y="27" text-anchor="middle" font-size="15" fill="#1a2332" font-weight="700">{1,2,3,8}</text>
+          <line x1="258" y1="40" x2="88" y2="72" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <line x1="280" y1="40" x2="280" y2="72" stroke="#a8dadc" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <line x1="302" y1="40" x2="472" y2="72" stroke="#8faab0" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.5" marker-end="url(#ah-tot-pr)"/>
+          <rect x="15" y="76" width="140" height="52" rx="6" fill="rgba(94,196,196,0.22)" stroke="#5ec4c4" stroke-width="1.8"/>
+          <text x="85" y="96" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">8−2=6 → {1,3,6}</text>
+          <text x="85" y="117" text-anchor="middle" font-size="11" fill="#5ec4c4">V = 0.8 ✓</text>
+          <rect x="210" y="76" width="140" height="52" rx="6" fill="rgba(230,180,96,0.18)" stroke="#e0b060" stroke-width="1.5"/>
+          <text x="280" y="96" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">3+1=4 → {2,4,8}</text>
+          <text x="280" y="117" text-anchor="middle" font-size="11" fill="#e0b060">V = 0.7</text>
+          <rect x="405" y="76" width="140" height="52" rx="6" fill="rgba(143,170,176,0.1)" stroke="#8faab0" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.65"/>
+          <text x="475" y="96" text-anchor="middle" font-size="12" fill="#8faab0">8+1=9 → {2,3,9}</text>
+          <text x="475" y="117" text-anchor="middle" font-size="10" fill="#8faab0">V = 0.3 · 剪枝</text>
+          <line x1="85" y1="128" x2="85" y2="158" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <rect x="15" y="162" width="140" height="52" rx="6" fill="rgba(94,196,196,0.3)" stroke="#5ec4c4" stroke-width="2"/>
+          <text x="85" y="182" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">3+1=4 → {4,6}</text>
+          <text x="85" y="202" text-anchor="middle" font-size="11" fill="#5ec4c4">V = 0.95 ✓</text>
+          <line x1="280" y1="128" x2="280" y2="158" stroke="#e0b060" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <rect x="210" y="162" width="140" height="52" rx="6" fill="rgba(230,180,96,0.18)" stroke="#e0b060" stroke-width="1.5"/>
+          <text x="280" y="182" text-anchor="middle" font-size="12" fill="#e0b060" font-weight="700">8+4=12 → {2,12}</text>
+          <text x="280" y="202" text-anchor="middle" font-size="11" fill="#e0b060">V = 0.6</text>
+          <line x1="85" y1="214" x2="85" y2="244" stroke="#5ec4c4" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <rect x="15" y="248" width="140" height="52" rx="6" fill="#2d8b8b"/>
+          <text x="85" y="270" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">4 × 6 = 24</text>
+          <text x="85" y="289" text-anchor="middle" font-size="11" fill="#1a2332" font-weight="700">✓ 解 1</text>
+          <line x1="280" y1="214" x2="280" y2="244" stroke="#e0b060" stroke-width="1.5" marker-end="url(#ah-tot)"/>
+          <rect x="210" y="248" width="140" height="52" rx="6" fill="#2d8b8b"/>
+          <text x="280" y="270" text-anchor="middle" font-size="14" fill="#1a2332" font-weight="700">12 × 2 = 24</text>
+          <text x="280" y="289" text-anchor="middle" font-size="11" fill="#1a2332" font-weight="700">✓ 解 2</text>
+          <rect x="400" y="162" width="150" height="138" rx="6" fill="#15202e" stroke="rgba(168,218,220,0.2)"/>
+          <text x="475" y="182" text-anchor="middle" font-size="12" fill="#a8dadc" font-weight="700">BFS 宽度 b=3</text>
+          <rect x="412" y="198" width="14" height="14" fill="rgba(94,196,196,0.4)" stroke="#5ec4c4" stroke-width="1.5"/>
+          <text x="432" y="210" font-size="10" fill="#5ec4c4">高 V：继续展开</text>
+          <rect x="412" y="220" width="14" height="14" fill="rgba(230,180,96,0.3)" stroke="#e0b060" stroke-width="1.2"/>
+          <text x="432" y="232" font-size="10" fill="#e0b060">中 V：备选</text>
+          <rect x="412" y="242" width="14" height="14" fill="rgba(143,170,176,0.2)" stroke="#8faab0" stroke-width="1.2" stroke-dasharray="2 2"/>
+          <text x="432" y="254" font-size="10" fill="#8faab0">低 V：剪枝</text>
+          <text x="475" y="278" text-anchor="middle" font-size="10" fill="#a8dadc">每步 LLM 评估</text>
+          <text x="475" y="293" text-anchor="middle" font-size="10" fill="#a8dadc">top-b 进入下一层</text>
+        </svg>
       </div>
     </div>
   </div>
+  </div>
   <aside class="notes">
-    Tree of Thoughts 将推理从线性的 CoT 升级为树状搜索。
+    Tree of Thoughts 把推理从线性 CoT 升级为树搜索。核心思想是：复杂问题常需要试错和回溯，单条推理链一旦出错就无法挽回，而树搜索可以在多条分支中探索和比较。
     <br><br>
-    CoT 是一条路走到黑。Tree of Thoughts 允许在每一步分支出多个候选思路，评估后选择最有希望的继续探索，不行的就回溯。MCTS，也就是蒙特卡洛树搜索，来自 AlphaGo，核心用 UCB 公式来平衡探索和利用。
+    左边是 ToT 的四个关键组件。第一，思维分解——先定义"一步"是什么粒度，比如 Game of 24 一步是一个等式，创意写作一步是一个段落。第二，思维生成——用 LLM 在每步生成 $b$ 个候选（独立采样或一次性 propose 多个）。第三，状态评估——让 LLM 对中间状态打分 $V(s)$ 或在多个候选间投票。第四，搜索算法——BFS 每层保留 top-$b$，或 DFS 配合阈值剪枝。
     <br><br>
-    大家看这个 UCB 公式。$\bar{X}_j$ 是节点 $j$ 的平均奖励，越高说明这条路越好。但后面这一项中，大 $N$ 是父节点的访问次数，小 $n_j$ 是当前节点的访问次数。如果一个节点被访问得很少，这一项就会很大，给它更多被选择的机会。这就是"探索"——避免错过潜在的好路径。
+    ToT 最核心的创新就是：<strong>让同一个 LLM 既当生成者，又当评判者</strong>——生成者提出想法，评判者评估哪些有前途。这类似人类思考时的"内心对话"。
     <br><br>
-    实际效果是：在数学推理、编程等复杂任务上，Tree of Thoughts 显著优于简单的 CoT，因为复杂问题往往需要试错和回溯。
+    右边以 Game of 24 为例：用 {1,2,3,8} 算出 24。根节点展开 3 个候选，LLM 给出评分：$8-2=6$ 得 $V=0.8$，$3+1=4$ 得 $V=0.7$，$8+1=9$ 得 $V=0.3$——最后这个直接被剪枝。高分分支继续往下展开，最终找到两条正确路径：$(8-2)\times(3+1)$ 和 $(8+3+1)\times 2$，都等于 24。
+    <br><br>
+    看左下的数据：Game of 24 上，直接 CoT 只有 $4\%$，CoT-SC 采样 100 次也只有 $9\%$，而 ToT 配合 $b=5$ 的宽搜直接达到 $74\%$——接近 20 倍的提升。这告诉我们：对需要搜索的问题，树结构比多次独立采样更高效。
+  </aside>
+</section>
+
+<!-- P3-S7b: Monte Carlo Tree Search -->
+<section data-part="3">
+  <h2>蒙特卡洛树搜索 (MCTS)</h2>
+  <div class="slide-body">
+  <div style="border-left:3px solid var(--ocean-teal); background:var(--ocean-mid); padding:0.55em 1em; margin-bottom:0.7em; font-size:0.82em; line-height:1.55;">
+    ToT 的 BFS/DFS 评估噪声大、无探索-利用平衡。MCTS（源自 <strong>AlphaGo</strong>）通过 <strong>多次模拟</strong> 降低评估方差，用 <strong>UCT 公式</strong> 自适应分配搜索预算。
+  </div>
+  <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.88em; margin-bottom:0.35em;">一轮 MCTS 迭代的四个阶段</div>
+  <div style="display:flex; gap:0.55em; margin-bottom:0.8em; align-items:stretch;">
+    <!-- ① Selection -->
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:4px; padding:0.55em 0.7em; display:flex; flex-direction:column;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.82em; margin-bottom:0.2em;">① 选择 Selection</div>
+      <svg viewBox="0 0 130 82" xmlns="http://www.w3.org/2000/svg" style="display:block; width:100%; max-width:135px; margin:0.15em auto 0.3em;">
+        <defs>
+          <marker id="mcts-sel-arr" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+            <polygon points="0 0, 5 2, 0 4" fill="#5ec4c4"/>
+          </marker>
+        </defs>
+        <g stroke="#a8dadc" stroke-width="1" opacity="0.3" fill="#223044">
+          <line x1="65" y1="14" x2="32" y2="36"/>
+          <line x1="32" y1="40" x2="16" y2="62"/>
+          <line x1="32" y1="40" x2="48" y2="62"/>
+          <line x1="98" y1="40" x2="82" y2="62"/>
+          <circle cx="32" cy="38" r="3"/>
+          <circle cx="16" cy="64" r="2.5"/>
+          <circle cx="48" cy="64" r="2.5"/>
+          <circle cx="82" cy="64" r="2.5"/>
+        </g>
+        <line x1="67" y1="14" x2="94" y2="36" stroke="#5ec4c4" stroke-width="2" marker-end="url(#mcts-sel-arr)"/>
+        <line x1="100" y1="42" x2="112" y2="62" stroke="#5ec4c4" stroke-width="2" marker-end="url(#mcts-sel-arr)"/>
+        <circle cx="65" cy="12" r="4" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+        <circle cx="98" cy="38" r="3.5" fill="#223044" stroke="#5ec4c4" stroke-width="2"/>
+        <circle cx="114" cy="64" r="4" fill="#5ec4c4" stroke="#a8dadc" stroke-width="1.5"/>
+        <text x="60" y="52" text-anchor="end" font-size="7" fill="#5ec4c4" font-weight="700">UCT</text>
+      </svg>
+      <div class="dim" style="font-size:0.7em; line-height:1.5; margin-top:auto;">沿 UCT 最大的子节点下行至叶节点</div>
+    </div>
+    <!-- ② Expansion -->
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:4px; padding:0.55em 0.7em; display:flex; flex-direction:column;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.82em; margin-bottom:0.2em;">② 扩展 Expansion</div>
+      <svg viewBox="0 0 130 82" xmlns="http://www.w3.org/2000/svg" style="display:block; width:100%; max-width:135px; margin:0.15em auto 0.3em;">
+        <g stroke="#a8dadc" stroke-width="1" opacity="0.35" fill="#223044">
+          <line x1="65" y1="14" x2="32" y2="36"/>
+          <line x1="65" y1="14" x2="98" y2="36"/>
+          <line x1="32" y1="40" x2="16" y2="54"/>
+          <line x1="32" y1="40" x2="48" y2="54"/>
+          <line x1="98" y1="40" x2="82" y2="54"/>
+          <line x1="98" y1="40" x2="114" y2="54"/>
+          <circle cx="65" cy="12" r="3.5"/>
+          <circle cx="32" cy="38" r="3"/>
+          <circle cx="98" cy="38" r="3"/>
+          <circle cx="16" cy="56" r="2.5"/>
+          <circle cx="48" cy="56" r="2.5"/>
+          <circle cx="82" cy="56" r="2.5"/>
+          <circle cx="114" cy="56" r="2.5"/>
+        </g>
+        <line x1="114" y1="58" x2="114" y2="68" stroke="#5ec4c4" stroke-width="1.8" stroke-dasharray="2 1.5"/>
+        <circle cx="114" cy="72" r="4.5" fill="rgba(94,196,196,0.45)" stroke="#5ec4c4" stroke-width="1.8" stroke-dasharray="2 1.5"/>
+        <text x="114" y="74.5" text-anchor="middle" font-size="7" fill="#f1faee" font-weight="700">+</text>
+        <text x="105" y="75" text-anchor="end" font-size="7" fill="#5ec4c4" font-weight="700">LLM</text>
+      </svg>
+      <div class="dim" style="font-size:0.7em; line-height:1.5; margin-top:auto;">LLM 生成一或多个新 thought 子节点</div>
+    </div>
+    <!-- ③ Simulation -->
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:4px; padding:0.55em 0.7em; display:flex; flex-direction:column;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.82em; margin-bottom:0.2em;">③ 模拟 Simulation</div>
+      <svg viewBox="0 0 130 82" xmlns="http://www.w3.org/2000/svg" style="display:block; width:100%; max-width:135px; margin:0.15em auto 0.3em;">
+        <defs>
+          <marker id="mcts-sim-arr" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+            <polygon points="0 0, 5 2, 0 4" fill="#e0b060"/>
+          </marker>
+        </defs>
+        <g stroke="#a8dadc" stroke-width="1" opacity="0.3" fill="#223044">
+          <line x1="65" y1="14" x2="32" y2="36"/>
+          <line x1="65" y1="14" x2="98" y2="36"/>
+          <line x1="32" y1="40" x2="16" y2="52"/>
+          <line x1="32" y1="40" x2="48" y2="52"/>
+          <line x1="98" y1="40" x2="82" y2="52"/>
+          <line x1="98" y1="40" x2="114" y2="52"/>
+          <circle cx="65" cy="12" r="3.5"/>
+          <circle cx="32" cy="38" r="2.5"/>
+          <circle cx="98" cy="38" r="2.5"/>
+          <circle cx="16" cy="54" r="2"/>
+          <circle cx="48" cy="54" r="2"/>
+          <circle cx="82" cy="54" r="2"/>
+        </g>
+        <circle cx="114" cy="54" r="4" fill="rgba(94,196,196,0.45)" stroke="#5ec4c4" stroke-width="2"/>
+        <path d="M 114 58 L 104 64 L 120 68 L 108 74" stroke="#e0b060" stroke-width="1.8" stroke-dasharray="2 1.5" fill="none" marker-end="url(#mcts-sim-arr)"/>
+        <text x="96" y="77" text-anchor="end" font-size="9" fill="#e0b060" font-weight="700">r</text>
+      </svg>
+      <div class="dim" style="font-size:0.7em; line-height:1.5; margin-top:auto;">Rollout / PRM 评分，得到奖励 <em>r</em></div>
+    </div>
+    <!-- ④ Backpropagation -->
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:4px; padding:0.55em 0.7em; display:flex; flex-direction:column;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.82em; margin-bottom:0.2em;">④ 反向传播</div>
+      <svg viewBox="0 0 130 82" xmlns="http://www.w3.org/2000/svg" style="display:block; width:100%; max-width:135px; margin:0.15em auto 0.3em;">
+        <defs>
+          <marker id="mcts-bp-arr" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+            <polygon points="0 0, 5 2, 0 4" fill="#e0b060"/>
+          </marker>
+        </defs>
+        <g stroke="#a8dadc" stroke-width="1" opacity="0.3" fill="#223044">
+          <line x1="65" y1="14" x2="32" y2="36"/>
+          <line x1="32" y1="40" x2="16" y2="54"/>
+          <line x1="32" y1="40" x2="48" y2="54"/>
+          <line x1="98" y1="40" x2="82" y2="54"/>
+          <circle cx="32" cy="38" r="2.5"/>
+          <circle cx="16" cy="56" r="2"/>
+          <circle cx="48" cy="56" r="2"/>
+          <circle cx="82" cy="56" r="2"/>
+        </g>
+        <line x1="114" y1="68" x2="100" y2="42" stroke="#e0b060" stroke-width="2" marker-end="url(#mcts-bp-arr)"/>
+        <line x1="96" y1="36" x2="67" y2="16" stroke="#e0b060" stroke-width="2" marker-end="url(#mcts-bp-arr)"/>
+        <circle cx="114" cy="72" r="4" fill="rgba(94,196,196,0.45)" stroke="#5ec4c4" stroke-width="1.8"/>
+        <circle cx="98" cy="38" r="3.5" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+        <circle cx="65" cy="12" r="4" fill="#223044" stroke="#e0b060" stroke-width="2"/>
+        <text x="108" y="52" font-size="7" fill="#e0b060" font-weight="700">+r</text>
+        <text x="74" y="25" font-size="7" fill="#e0b060" font-weight="700">+r</text>
+      </svg>
+      <div class="dim" style="font-size:0.7em; line-height:1.5; margin-top:auto;">沿路径更新每节点 <em>N, Q</em></div>
+    </div>
+  </div>
+  <div class="two-column" style="align-items:stretch; gap:1.3em;">
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:1.02em; margin-bottom:0.35em;">UCT — 选点公式</div>
+      <div class="math-block" style="margin:0 0 0.7em; font-size:1.08em;">
+        $$\text{UCT}(s,a) = \underbrace{\tfrac{Q(s,a)}{N(s,a)}}_{\text{利用}} + c\cdot\underbrace{\sqrt{\tfrac{\ln N(s)}{N(s,a)}}}_{\text{探索}}$$
+      </div>
+      <p style="margin:0; font-size:0.9em; line-height:1.7;">
+        <span class="accent">$N(s,a)$</span> 小 &rArr; 探索项大，鼓励<span class="accent">冷门分支</span>；<br>
+        <span class="accent">$Q/N$</span> 高 &rArr; 利用项大，深入<span class="accent">已知好路径</span>。
+      </p>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.88em; margin-bottom:0.3em;">MCTS 概念映射：围棋 ↔ LLM 推理</div>
+      <div style="background:var(--ocean-mid); border-radius:4px; padding:0.55em 0.85em; margin-bottom:0.55em;">
+        <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:0.18em 0.7em; font-size:0.76em; line-height:1.65; align-items:center;">
+          <div style="font-size:0.86em; color:var(--ocean-mist); opacity:0.75;"></div>
+          <div style="color:#8faab0; font-weight:700; font-size:0.86em;">AlphaGo</div>
+          <div style="color:#5ec4c4; font-weight:700; font-size:0.86em;">LLM 推理</div>
+          <div style="color:var(--ocean-seafoam); font-weight:700;">状态</div>
+          <div class="dim">棋盘局面</div>
+          <div class="dim">$[x, z_1, \ldots, z_i]$</div>
+          <div style="color:var(--ocean-seafoam); font-weight:700;">动作</div>
+          <div class="dim">落子位置</div>
+          <div class="dim">下一个 thought</div>
+          <div style="color:var(--ocean-seafoam); font-weight:700;">策略</div>
+          <div class="dim">落子分布</div>
+          <div class="dim">LLM $p_\theta$</div>
+          <div style="color:var(--ocean-seafoam); font-weight:700;">价值</div>
+          <div class="dim">胜率估计</div>
+          <div class="dim">PRM 分数</div>
+          <div style="color:var(--ocean-seafoam); font-weight:700;">终止</div>
+          <div class="dim">胜 / 负</div>
+          <div class="dim">答案对 / 错</div>
+        </div>
+      </div>
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.84em; margin-bottom:0.3em;">MCTS + LLM 代表系统</div>
+      <div style="display:flex; flex-direction:column; gap:0.4em;">
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.42em 0.8em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.8em;">rStar-Math <span style="font-weight:400; color:var(--ocean-mist); font-size:0.9em;">· MSRA, 2025</span></div>
+          <div class="dim" style="font-size:0.7em; line-height:1.5;">7B 模型 + PRM + MCTS 自我进化（4 轮）；MATH 达 90.0%、AIME 53.3%，超过 o1-preview</div>
+          <div style="font-size:0.6em; margin-top:0.2em; font-family:monospace; letter-spacing:-0.01em;">
+            <span style="color:var(--ocean-mist); opacity:0.75;">Guan et al.</span>
+            &nbsp;<a href="https://arxiv.org/abs/2501.04519" style="color:#5ec4c4; text-decoration:none;">arXiv:2501.04519</a>
+          </div>
+        </div>
+        <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.42em 0.8em; border-radius:4px;">
+          <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.8em;">AlphaProof <span style="font-weight:400; color:var(--ocean-mist); font-size:0.9em;">· DeepMind, 2024</span></div>
+          <div class="dim" style="font-size:0.7em; line-height:1.5;">AlphaZero + Lean 4 形式化证明搜索；与 AlphaGeometry 2 合作在 IMO 2024 解出 4/6 题（银牌水平）</div>
+          <div style="font-size:0.6em; margin-top:0.2em; font-family:monospace; letter-spacing:-0.01em;">
+            <a href="https://deepmind.google/blog/ai-solves-imo-problems-at-silver-medal-level/" style="color:#5ec4c4; text-decoration:none;">DeepMind blog, 2024-07</a>
+            &nbsp;·&nbsp;
+            <a href="https://www.nature.com/articles/s41586-025-09833-y" style="color:#5ec4c4; text-decoration:none;">Nature, 2025</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <aside class="notes">
+    ToT 的 BFS/DFS 有几个不足：BFS 内存开销大、候选平等对待；DFS 容易陷入一条长路径、剪枝阈值需人工设定；最关键是 LLM 单次评估噪声大。MCTS 源自 AlphaGo，正是为解决这些问题而生。
+    <br><br>
+    每一轮 MCTS 迭代分四个阶段。第一，<strong>选择</strong>：从根节点开始沿着 UCT 值最大的子节点一路下行，到达一个尚未完全展开的叶节点。第二，<strong>扩展</strong>：用 LLM 从该叶节点生成一个或多个新的 thought 作为新子节点。第三，<strong>模拟</strong>：对新节点进行评估，可以是 rollout 到底拿答案对错，也可以用 PRM 对每步打分。第四，<strong>反向传播</strong>：把这次模拟的奖励 $r$ 沿路径回传，更新每个节点的访问次数 $N$ 和累积奖励 $Q$。
+    <br><br>
+    核心是 UCT 公式。$Q/N$ 是利用项，代表这条路历史平均收益；后面的 $\sqrt{\ln N(s)/N(s,a)}$ 是探索项，访问次数少的节点会获得"好奇心加成"。参数 $c$ 控制探索-利用平衡，经典取 $\sqrt{2}$。Kocsis 和 Szepesvári 2006 年证明了收敛性——模拟次数趋于无穷时 $Q/N$ 收敛到真实价值；实际中 10 到 100 次模拟就能有明显效果。
+    <br><br>
+    右边上方的映射表帮助大家建立直觉：MCTS 概念在围棋和 LLM 推理中是一一对应的——状态从棋盘局面变成已有的推理步骤序列；动作从落子变成下一个 thought；策略网络从落子分布变成 LLM 的 token 分布 $p_\theta$；价值网络从胜率估计变成 PRM 分数；终止从胜负变成答案对错。理解了这个映射，就能理解为什么 AlphaGo 的技术可以直接迁移到 LLM 推理。
+    <br><br>
+    下方是两个代表性的 MCTS + LLM 系统。第一个是微软亚研院 2025 年初发表的 <strong>rStar-Math</strong>（arXiv:2501.04519，Guan 等）：用 7B 小模型加 PRM 和 MCTS 做 4 轮自我进化，在 MATH 基准达到 90.0%、AIME 达到 53.3%，首次让小模型在数学推理上<strong>超过 o1-preview</strong>。第二个是 DeepMind 2024 年 7 月发布的 <strong>AlphaProof</strong>（详见 DeepMind 博客及 2025 年 Nature 论文）：它把 AlphaZero 的强化学习架构和 Lean 4 形式化证明结合起来，配合 AlphaGeometry 2 在 2024 年 IMO 解出 6 题中的 4 题（AlphaProof 单独解出 P1/P2/P6），拿到银牌水平（28/42 分）。
+    <br><br>
+    下一页我们来看 MCTS 思想在工业界的最著名实践——OpenAI 的 o1/o3 系列。
   </aside>
 </section>
 
 <!-- P3-S8: OpenAI o1/o3 -->
 <section data-part="3">
   <h2>OpenAI o1/o3：Test-Time Compute 的工业实践</h2>
-  <div style="display:flex; gap:1.2em;">
-    <div style="flex:1;">
-      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid var(--ocean-seafoam);">
-        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.5em; font-size:1.05em;">o1 的核心思路</div>
-        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
-          <li>训练模型"学会思考"（强化学习训练推理策略）</li>
+  <div class="slide-body">
+  <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.65em 1em; border-radius:4px; margin-bottom:1.4em; font-size:0.88em; text-align:left;">
+    前面讲的 CoT / Self-Consistency / ToT 都是算法层面的思路；OpenAI 把它们工业化，用强化学习<strong>让模型自己学会思考</strong>，首次大规模验证了 inference-time scaling 的价值。
+  </div>
+  <div style="display:flex; gap:1.4em; align-items:stretch;">
+    <div style="flex:1; display:flex;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.1em 1.3em 1.2em; border-left:3px solid var(--ocean-seafoam); text-align:left; flex:1;">
+        <div style="color:var(--ocean-seafoam); font-weight:700; margin-bottom:0.65em; font-size:1.05em;">o1 的核心思路</div>
+        <ul style="font-size:0.9em; padding-left:1.2em; margin:0; text-align:left; line-height:1.65;">
+          <li>训练模型"学会思考"（强化学习训练推理策略）<sup style="color:var(--ocean-seafoam);">[1]</sup></li>
           <li>推理时自动进行多步推理 + 自我验证</li>
           <li>内置 hidden CoT（思考过程对用户不可见）</li>
-          <li>在数学/编程/科学推理上大幅超越 GPT-4</li>
+          <li>在数学推理等任务大幅超越 GPT-4o（AIME 2024：12% → 74%）<sup style="color:var(--ocean-seafoam);">[1]</sup></li>
         </ul>
       </div>
     </div>
-    <div style="flex:1;">
-      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.2em 1.3em; border-left:3px solid #5ec4c4;">
-        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.5em; font-size:1.05em;">关键洞察</div>
-        <ul style="font-size:0.92em; padding-left:1.2em; margin:0;">
+    <div style="flex:1; display:flex;">
+      <div style="background:var(--ocean-mid); border-radius:8px; padding:1.1em 1.3em 1.2em; border-left:3px solid #5ec4c4; text-align:left; flex:1;">
+        <div style="color:#5ec4c4; font-weight:700; margin-bottom:0.65em; font-size:1.05em;">关键洞察</div>
+        <ul style="font-size:0.9em; padding-left:1.2em; margin:0; text-align:left; line-height:1.65;">
           <li>不是让模型更大，而是让模型<strong>思考更久</strong></li>
           <li>推理计算量可动态调整（简单问题少想，难题多想）</li>
-          <li>o3 在 ARC-AGI 基准上达到人类水平</li>
+          <li>o3 在 ARC-AGI-1 首次达到人类平均水平（87.5%）<sup style="color:#5ec4c4;">[2]</sup></li>
           <li>验证了 inference-time scaling 的有效性</li>
         </ul>
       </div>
     </div>
   </div>
-  <div class="callout" style="margin-top:1em; text-align:center;">
-    <p style="margin:0; font-size:1.05em;">o1/o3 证明：<span class="accent">推理时的计算扩展</span>是提升 LLM 能力的新维度，与模型规模扩展互补。</p>
+  <div style="display:flex; gap:0.9em; margin-top:1.5em;">
+    <div style="flex:1; background:rgba(45,139,139,0.12); border:1px solid rgba(45,139,139,0.35); border-radius:6px; padding:0.65em 0.9em; text-align:center; font-size:0.82em;">
+      <div style="color:var(--ocean-mist); font-size:0.85em;">范式转变</div>
+      <div style="color:var(--ocean-cream); margin-top:0.25em;"><strong>更大</strong> → <strong>更久</strong></div>
+    </div>
+    <div style="flex:1; background:rgba(45,139,139,0.12); border:1px solid rgba(45,139,139,0.35); border-radius:6px; padding:0.65em 0.9em; text-align:center; font-size:0.82em;">
+      <div style="color:var(--ocean-mist); font-size:0.85em;">关键能力</div>
+      <div style="color:var(--ocean-cream); margin-top:0.25em;"><strong>动态思考预算</strong></div>
+    </div>
+    <div style="flex:1; background:rgba(45,139,139,0.12); border:1px solid rgba(45,139,139,0.35); border-radius:6px; padding:0.65em 0.9em; text-align:center; font-size:0.82em;">
+      <div style="color:var(--ocean-mist); font-size:0.85em;">里程碑</div>
+      <div style="color:var(--ocean-cream); margin-top:0.25em;"><strong>o3 达 ARC-AGI-1 人类水平</strong></div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:1.3em; text-align:center;">
+    <p style="margin:0; font-size:1em;">o1/o3 证明：<span class="accent">推理时的计算扩展</span>是提升 LLM 能力的新维度，与模型规模扩展<strong>互补</strong>。</p>
+  </div>
+  <div class="dim" style="margin-top:0.9em; font-size:0.56em; text-align:left; line-height:1.7; border-top:1px solid rgba(168,218,220,0.2); padding-top:0.55em;">
+    <div style="color:var(--ocean-mist); font-weight:700; margin-bottom:0.35em;">参考资料</div>
+    <div style="margin-bottom:0.3em;">
+      <sup style="color:var(--ocean-seafoam);">[1]</sup>&nbsp;OpenAI. &ldquo;Learning to Reason with LLMs.&rdquo; 2024&#8209;09&#8209;12.&nbsp;
+      <span style="font-family:monospace; color:var(--ocean-seafoam);">https://openai.com/index/learning-to-reason-with-llms/</span>
+    </div>
+    <div>
+      <sup style="color:#5ec4c4;">[2]</sup>&nbsp;Chollet, F. / ARC Prize. &ldquo;OpenAI o3 Breakthrough High Score on ARC&#8209;AGI&#8209;Pub.&rdquo; 2024&#8209;12&#8209;20.&nbsp;
+      <span style="font-family:monospace; color:#5ec4c4;">https://arcprize.org/blog/oai-o3-pub-breakthrough</span>
+    </div>
+  </div>
   </div>
   <aside class="notes">
     OpenAI 的 o1 和 o3 模型是 Inference-Time Scaling 最著名的工业实践。
     <br><br>
-    左栏总结了 o1 的核心思路。它用强化学习训练模型"学会思考"——也就是自动进行多步推理、自我验证和纠错。推理时，模型会先生成一段 Hidden Chain of Thought，对用户不可见，然后给出最终答案。
+    左栏总结了 o1 的核心思路。它用大规模强化学习训练模型"学会思考"——自动进行多步推理、自我验证和纠错。推理时模型会先生成一段 Hidden Chain of Thought，对用户不可见，然后给出最终答案。在 AIME 2024 数学竞赛上，GPT-4o 平均只能解 12%，而 o1 单次采样就达到 74%，是一个量级的提升。
     <br><br>
-    右栏的关键洞察是：o1 不是让模型更大，而是让模型思考更久。推理计算量可以动态调整——简单问题少想一会儿，难题多想一会儿。o3 在 ARC-AGI 基准测试上达到了人类水平，这个测试被认为是通用人工智能的门槛测试之一。
+    右栏的关键洞察是：o1 不是让模型更大，而是让模型思考更久。推理计算量可以动态调整——简单问题少想一会儿，难题多想一会儿。2024 年 12 月，o3 在 ARC-AGI-1 基准上以高算力设置取得 87.5%，首次达到人类平均水平（约 73–77%），这被视为 test-time scaling 的里程碑。
     <br><br>
-    这验证了 Inference-Time Scaling 的有效性：不一定要更大的模型，让模型思考更久也能达到更好的效果。
+    需要注意的是：高算力版代价很大——根据 ARC Prize 官方披露，87.5% 这档用了 1024 次采样、172× 算力，每题零售成本约 $4,560。所以更准确的说法是：o3 验证了 inference-time scaling 的有效性，推理计算确实可以换取准确率，但代价不菲。
+    <br><br>
+    具体数据来源见 slide 底部参考资料 [1][2]。
   </aside>
 </section>
 
 <!-- P3-S9: Inference Scaling Laws (图表) -->
 <section data-part="3">
   <h2>Inference Scaling Laws</h2>
-  <div class="two-column">
-    <div>
-      <p>核心发现：</p>
-      <div class="math-block">
+  <div class="slide-body">
+  <div style="background:var(--ocean-mid); border-left:3px solid var(--ocean-teal); padding:0.65em 1em; border-radius:4px; margin-bottom:1.4em; font-size:0.88em; text-align:left;">
+    训练时代有 Chinchilla Scaling Laws，推理时代也有类似规律吗？<strong>答案是肯定的</strong>——性能与推理计算量呈对数线性关系。
+  </div>
+  <div class="two-column" style="align-items:center;">
+    <div style="text-align:left;">
+      <div class="math-block" style="margin:0.4em 0 1.4em;">
         $$\text{Performance} \propto \log(\text{Inference FLOPs})$$
       </div>
-      <ul style="font-size:0.88em;">
-        <li>推理计算量与性能呈<span class="accent">对数线性关系</span></li>
-        <li>与训练 scaling law 形式类似（$\text{Loss} \propto \log(\text{Compute})$）</li>
-        <li><strong>小模型 + 更多推理计算</strong> 可以匹配大模型的性能</li>
+      <ul style="font-size:0.86em; line-height:1.9; text-align:left; padding-left:1.2em; margin:0 0 1.4em;">
+        <li style="margin-bottom:0.35em;">推理计算量与性能呈<span class="accent">对数线性关系</span></li>
+        <li style="margin-bottom:0.35em;">与训练 scaling law 形式类似（$\text{Loss} \propto \log(\text{Compute})$）</li>
+        <li style="margin-bottom:0.35em;"><strong>小模型 + 更多推理计算</strong> 可以匹配大模型的性能</li>
         <li>存在"计算最优"的分配策略</li>
       </ul>
-      <div class="callout" style="margin-top:0.4em;">
-        <div class="callout-title">实践意义</div>
-        <p style="margin:0; font-size:0.85em;">不一定需要训练更大的模型。对于单个困难问题，增加推理计算（更多采样、搜索）可以显著提升准确率。</p>
+      <div class="callout" style="margin:0; padding:0.85em 1.1em;">
+        <div class="callout-title" style="font-size:0.92em;">实践意义</div>
+        <p style="margin:0.3em 0 0; font-size:0.84em; line-height:1.6; text-align:left;">不一定需要训练更大的模型。对于单个困难问题，<br>增加推理计算（更多采样、搜索）可以显著提升准确率。</p>
       </div>
     </div>
-    <div>
-      <div class="img-center">
-        <img src="assets/chart-scaling-law.png" alt="Inference Scaling Law" style="max-height:48vh;" class="plain">
+    <div style="display:flex; flex-direction:column; justify-content:center; align-items:center;">
+      <div class="img-center" style="margin:0;">
+        <img src="assets/chart-scaling-law.png" alt="Inference Scaling Law" style="max-height:50vh;" class="plain">
       </div>
-      <p class="dim" style="font-size:0.75em; text-align:center;">（定性示意图，趋势参考 Snell et al. "Scaling LLM Test-Time Compute" 2024，具体数值为模拟）</p>
+      <p class="dim" style="font-size:0.7em; text-align:center; margin-top:0.4em;">趋势参考 Snell et al., arXiv:2408.03314 (2024)；此处为定性示意图。</p>
     </div>
+  </div>
   </div>
   <aside class="notes">
     最后来看 Inference Scaling Laws。
@@ -448,22 +862,39 @@
     更有趣的发现是：一个 $7\text{B}$ 的小模型，如果分配更多的推理计算，比如 $64$ 次采样加验证，可以达到 $70\text{B}$ 大模型单次推理的性能。这意味着：对于单个困难问题，用小模型多算几次可能比用大模型算一次更划算——更快也更省资源。
     <br><br>
     当然，这也提示了一个计算最优的分配问题：给定固定的总预算，应该花多少在训练上、多少在推理上？这是一个活跃的研究方向。
+    <br><br>
+    <strong>出处</strong>：Snell, Lee, Xu, Kumar, <em>"Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters"</em>, arXiv:2408.03314 (2024)。推理 FLOPs（对数轴）与准确率近似线性的趋势见 Figure 4/6/8；§5 与 Figure 9 的 "FLOPs-matched evaluation" 展示了小模型 + 更多推理计算可超过 $14\times$ 更大预训练模型的结论。论文本身未用 "log-linear" 术语，这是对图中趋势的定性概括。
   </aside>
 </section>
 
 <!-- P3-S10: 全课总结 & Q&A (PNG) -->
 <section data-part="3">
   <h2>全课总结</h2>
+  <div class="slide-body">
   <div class="img-center">
-    <img src="assets/p3-summary.png" alt="课程总结" style="max-height:48vh;">
+    <img src="assets/p3-summary.png" alt="课程总结" style="max-height:40vh;">
   </div>
-  <div style="margin-top:0.6em; font-size:0.95em;">
-    <p style="margin:0.4em 0;">Part 1: 推理基础 — <span class="accent">理解</span>推理流程和瓶颈 (Transformer, 自回归, KV Cache)</p>
-    <p style="margin:0.4em 0;">Part 2: 推理加速 — <span class="accent">优化</span>推理效率 (Speculative Decoding, 量化, Flash Attention)</p>
-    <p style="margin:0.4em 0;">Part 3: 推理扩展 — <span class="accent">扩展</span>推理计算 (CoT, Self-Consistency, MCTS, Scaling Laws)</p>
+  <div style="display:flex; gap:0.8em; margin-top:1em;">
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-teal); border-radius:6px; padding:0.6em 0.85em;">
+      <div style="color:var(--ocean-teal); font-weight:700; font-size:0.8em; margin-bottom:0.15em;">Part 1 &middot; 理解</div>
+      <div style="font-weight:700; font-size:0.88em; margin-bottom:0.15em;">推理基础</div>
+      <div class="dim" style="font-size:0.72em; line-height:1.45;">Transformer &middot; 自回归 &middot; KV Cache &middot; 瓶颈分析</div>
+    </div>
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid #5ec4c4; border-radius:6px; padding:0.6em 0.85em;">
+      <div style="color:#5ec4c4; font-weight:700; font-size:0.8em; margin-bottom:0.15em;">Part 2 &middot; 优化</div>
+      <div style="font-weight:700; font-size:0.88em; margin-bottom:0.15em;">推理加速</div>
+      <div class="dim" style="font-size:0.72em; line-height:1.45;">Speculative Decoding &middot; 量化 &middot; Flash Attention &middot; PagedAttention</div>
+    </div>
+    <div style="flex:1; background:var(--ocean-mid); border-top:3px solid var(--ocean-seafoam); border-radius:6px; padding:0.6em 0.85em;">
+      <div style="color:var(--ocean-seafoam); font-weight:700; font-size:0.8em; margin-bottom:0.15em;">Part 3 &middot; 扩展</div>
+      <div style="font-weight:700; font-size:0.88em; margin-bottom:0.15em;">推理扩展</div>
+      <div class="dim" style="font-size:0.72em; line-height:1.45;">CoT &middot; Self-Consistency &middot; ToT &middot; MCTS &middot; Scaling Laws</div>
+    </div>
   </div>
-  <div style="margin-top:0.8em; text-align:center;">
-    <p style="font-size:0.9em; color:var(--ocean-mist);">Q&A 欢迎提问</p>
+  <div class="callout" style="margin-top:1.1em; text-align:center;">
+    <p style="margin:0; font-size:0.9em;">核心信息：推理不仅是工程问题 — <span class="accent">更多推理计算</span>能显著提升输出质量</p>
+    <p style="margin:0.35em 0 0; font-size:0.8em; color:var(--ocean-mist);">感谢聆听 &middot; Q&amp;A 欢迎提问</p>
+  </div>
   </div>
   <aside class="notes">
     到这里我们全部三部分的内容就讲完了，来做一个全课总结。
