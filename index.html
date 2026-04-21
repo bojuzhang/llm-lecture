@@ -1794,7 +1794,7 @@
       </div>
       <div class="callout" style="margin-top:0.5em;">
         <div class="callout-title">实践建议</div>
-        <p style="margin:0; font-size:0.85em;">INT4 量化通常损失 &lt; 3% 精度<br>推荐：GPTQ/AWQ 用于 GPU，GGUF 用于 CPU</p>
+        <p style="margin:0; font-size:0.85em;">INT4 量化通常损失 &lt; 1% 精度<br>推荐：GPTQ/AWQ 用于 GPU，GGUF 用于 CPU</p>
       </div>
     </div>
   </div>
@@ -1955,7 +1955,7 @@
     <br><br>
     请看左边两张图的对比。上面是传统的 KV Cache 分配方式：给每个请求预分配一段连续的显存空间。问题是有些请求用不完预分配的空间，比如模型可能最大会吐出 1000 个token，于是系统按这个标准给这个请求分配内存，但它实际只用了 500 个，剩下的 500 个token的显存就浪费了。而且如果请求的长度变化很大，就会产生很多显存碎片。下面是 PagedAttention 的做法：把 KV Cache 分成固定大小的块，像操作系统的内存页一样管理。不同请求的 KV Cache 可以不连续存储，通过一个页表来映射。这样就消除了碎片问题，显存利用率从大约 $60\%$ 提升到 $90\%$ 以上。
     <br><br>
-    这页 slides 的下面还提到了分布式推理。分布式推理想解决的问题是：当模型大到单张 GPU 放不下时，比如 $70\text{B}$ 模型需要 $4$ 张 40G 的 A100，有两种并行策略：Tensor Parallelism 是把每一层的权重切分到多张 GPU 上同时计算，因为矩阵乘法是可以分块的，把权重矩阵切块放在多个 GPU 上，当然有时需要做一次 All-Reduce 汇总一下结果；Pipeline Parallelism 是把不同层放到不同 GPU 上流水线处理，比较朴素的想法就是把前1/4部分的层放到第一张 GPU，以此类推可以放四个 GPU 。这样输入进来，经过 GPU1 ，GPU2 ，GPU3 ，GPU4 。通信频率较低，只需要传递激活值。分布式推理是实现超大模型推理的必要手段。
+    这页 slides 的下面还提到了分布式推理。分布式推理想解决的问题是：当模型大到单张 GPU 放不下时，比如 $70\text{B}$ 模型可能需要放到 $4$ 张 A100 卡上，有两种并行策略：Tensor Parallelism 是把每一层的权重切分到多张 GPU 上同时计算，因为矩阵乘法是可以分块的，把权重矩阵切块放在多个 GPU 上，当然有时需要做一次 All-Reduce 汇总一下结果；Pipeline Parallelism 是把不同层放到不同 GPU 上流水线处理，比较朴素的想法就是把前1/4部分的层放到第一张 GPU，以此类推可以放四个 GPU 。这样输入进来，经过 GPU1 ，GPU2 ，GPU3 ，GPU4 。通信频率较低，只需要传递激活值。分布式推理是实现超大模型推理的必要手段。
   </aside>
 </section>
 
