@@ -1512,7 +1512,7 @@
     <br><br>
     看右边的 Roofline 图。在算术强度较低的区域，性能被内存带宽限制，曲线是上升的。到了算术强度足够高时，性能被算力限制，曲线变成平台。LLM 的 Decode 阶段恰恰落在左边这个上升区域——每个 token 要读取几十 GB 的模型权重，但只做几 GFLOP 的计算，算术强度很低。
     <br><br>
-    所以加速推理有三个核心方向：减少访存量，可以减少模型大小，比如说量化；减少访存次数，比如 Flash Attention；或者用小模型来帮忙，像是 Speculative Decoding。接下来我们逐一介绍。
+    那么我们可以从几个方向来优化推理：减少访存量，可以减少模型大小，比如说量化；减少访存次数，比如 Flash Attention；或者用小模型来帮忙，像是 Speculative Decoding。接下来我们逐一介绍。
   </aside>
 </section>
 
@@ -1833,7 +1833,7 @@
       <foreignObject x="75" y="255" width="230" height="30"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:13px;color:#e09060;text-align:center;line-height:30px;">显存: $O(N^2)$ ❌</div></foreignObject>
 
       <rect x="75" y="290" width="230" height="25" rx="4" fill="#1a2332" stroke="#8faab0" stroke-width="1" opacity="0.5"/>
-      <foreignObject x="75" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ $256\text{M}$ 元素</div></foreignObject>
+      <foreignObject x="75" y="290" width="230" height="25"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;color:#8faab0;text-align:center;line-height:25px;">$N=8192$ 时 $\to$ $256\text{M}$ 的显存占用</div></foreignObject>
 
       <!-- Arrow -->
       <text x="395" y="140" text-anchor="middle" font-size="24" fill="#a8dadc">→</text>
@@ -1875,13 +1875,87 @@
   <aside class="notes">
     接下来看一个系统层面的优化——Flash Attention。
     <br><br>
-    在计算 softmax 时，要先算出一个 $N \times N$ 的完整注意力矩阵。$N=8192$ 时，这个矩阵有 $6700$ 万元素，单层单头就要 $128\,\text{MB}$ ，而且在计算过程中还会产生一堆中间结果。
+    在计算 softmax 时，要先算出一个 $N \times N$ 的完整注意力矩阵。$N=8192$ 时，这个矩阵有 $6700$ 万元素，而且在计算过程中还会产生一堆中间结果。
     <br><br>
-    计算需要在 SRAM 里进行，但 SRAM 的容量是有限的，无法存下完整的 $N \times N$ 矩阵。传统实现只能把这个矩阵写回 HBM (High Bandwidth Memory) 显存，数据在 SRAM 和 HBM 之间搬来搬去，而搬运数据浪费了很多时间。
+    GPU 有多级内存：SRAM → HBM(显存) → DRAM。我们当然很希望数据全放在 SRAM 里，因为这样读写很快，但是SRAM 的容量是有限的，无法存下完整的 $N \times N$ 矩阵。传统实现只能把这个巨大的中间矩阵写回 HBM (High Bandwidth Memory) 显存，而 HBM 的读写相比于计算是很慢的。
     <br><br>
-    Flash Attention 的创新在于分块计算。看右边的示意图：不再是完整的大矩阵，而是把 $Q$、$K$、$V$ 分成小块，在 GPU 的快速 SRAM 缓存里计算局部注意力，然后累积结果。关键是不需要把完整的 $N \times N$ 矩阵写回慢速的 HBM 显存。
+    Flash Attention 的创新在于分块计算。看右边的示意图：不再算完整的大矩阵，而是把 $Q$、$K$、$V$ 分成小块，放到在 GPU 的 SRAM 里计算中间结果并累积，所有的计算（包括 softmax、求和）都在 SRAM 里一气呵成。关键是不需要把中间结果的 $N \times N$ 矩阵写回 HBM。
     <br><br>
-    数学结果和标准 Attention 完全一致，但显存从 $O(N^2)$ 降到了 $O(N)$。实际效果是在长序列推理时速度提升 $2$ 到 $4$ 倍，显存大幅减少。这是一个非常重要的优化，几乎所有现代 LLM 推理框架都默认使用 Flash Attention。
+    数学结果和标准 Attention 完全一致，但中间显存占用从 $O(N^2)$ 降到了 $O(N)$。实际效果是在长序列推理时速度提升 $2$ 到 $4$ 倍，显存大幅减少。这是一个非常重要的优化，几乎所有现代 LLM 推理框架都默认使用 Flash Attention。
+  </aside>
+</section>
+
+<!-- P2-S8: PagedAttention & 分布式推理 (SVG) -->
+<section data-part="2">
+  <h2>PagedAttention &amp; 分布式推理</h2>
+  <div class="two-column">
+    <div>
+      <div class="diagram">
+        <svg viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" class="svg-diagram" style="max-width:100%;">
+          <!-- Traditional -->
+          <text x="95" y="18" text-anchor="middle" font-size="12" fill="#e09060" font-weight="700">传统分配</text>
+          <rect x="10" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#e09060" stroke-width="1.5"/>
+          <rect x="15" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="55" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="95" y="30" width="35" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="15" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="55" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="95" y="55" width="35" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="15" y="80" width="35" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="55" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <rect x="95" y="80" width="35" height="20" rx="2" fill="none" stroke="#e09060" stroke-width="1" stroke-dasharray="3 2"/>
+          <text x="160" y="95" font-size="10" fill="#e09060">碎片!</text>
+
+          <!-- Arrow -->
+          <text x="195" y="70" text-anchor="middle" font-size="16" fill="#a8dadc">→</text>
+
+          <!-- Paged -->
+          <text x="285" y="18" text-anchor="middle" font-size="12" fill="#5ec4c4" font-weight="700">PagedAttention</text>
+          <rect x="200" y="25" width="170" height="90" rx="4" fill="#223044" stroke="#5ec4c4" stroke-width="1.5"/>
+          <rect x="205" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="240" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="275" y="30" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="310" y="30" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="205" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <rect x="240" y="55" width="30" height="20" rx="2" fill="#e0b060" opacity="0.5"/>
+          <rect x="275" y="55" width="30" height="20" rx="2" fill="#2d8b8b" opacity="0.5"/>
+          <rect x="310" y="55" width="30" height="20" rx="2" fill="#5ec4c4" opacity="0.5"/>
+          <text x="285" y="95" text-anchor="middle" font-size="10" fill="#5ec4c4">页表映射，无碎片</text>
+
+          <!-- Labels -->
+          <rect x="10" y="130" width="360" height="35" rx="6" fill="#223044" stroke="#2d8b8b" stroke-width="1" opacity="0.7"/>
+          <text x="190" y="152" text-anchor="middle" font-size="12" fill="#a8dadc">灵感来自操作系统虚拟内存分页机制</text>
+
+          <!-- Distributed -->
+          <rect x="10" y="180" width="360" height="70" rx="8" fill="#223044" stroke="#5ec4c4" stroke-width="1" opacity="0.5"/>
+          <text x="190" y="200" text-anchor="middle" font-size="13" fill="#5ec4c4" font-weight="700">超大模型的分布式推理</text>
+          <text x="190" y="220" text-anchor="middle" font-size="11" fill="#8faab0">Tensor Parallelism: 将每层的权重切分到多张 GPU</text>
+          <text x="190" y="238" text-anchor="middle" font-size="11" fill="#8faab0">Pipeline Parallelism: 将不同层放到不同 GPU</text>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p><span class="accent">PagedAttention</span> (vLLM):</p>
+      <ul style="font-size:0.88em;">
+        <li>KV Cache 分成固定大小的<strong>页/块</strong></li>
+        <li>像 OS 虚拟内存一样管理</li>
+        <li>消除显存碎片</li>
+        <li>支持 KV Cache 共享（prefix caching）</li>
+      </ul>
+      <p style="margin-top:0.6em;"><span class="accent">Tensor Parallelism</span>:</p>
+      <ul style="font-size:0.88em;">
+        <li>每层权重切分到多张 GPU</li>
+        <li>$70\text{B}$ 模型：$4\times$ A100 ($80\,\mathrm{GB}$)</li>
+        <li>通信开销：All-Reduce 操作</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    PagedAttention 是 vLLM 框架的核心创新，灵感来自操作系统的虚拟内存管理，它想要解决的问题是 KV Cache 储存时产生显存碎片的问题。
+    <br><br>
+    请看左边两张图的对比。上面是传统的 KV Cache 分配方式：给每个请求预分配一段连续的显存空间。问题是有些请求用不完预分配的空间，比如模型可能最大会吐出 1000 个token，于是系统按这个标准给这个请求分配内存，但它实际只用了 500 个，剩下的 500 个token的显存就浪费了。而且如果请求的长度变化很大，就会产生很多显存碎片。下面是 PagedAttention 的做法：把 KV Cache 分成固定大小的块，像操作系统的内存页一样管理。不同请求的 KV Cache 可以不连续存储，通过一个页表来映射。这样就消除了碎片问题，显存利用率从大约 $60\%$ 提升到 $90\%$ 以上。
+    <br><br>
+    这页 slides 的下面还提到了分布式推理。分布式推理想解决的问题是：当模型大到单张 GPU 放不下时，比如 $70\text{B}$ 模型需要 $4$ 张 40G 的 A100，有两种并行策略：Tensor Parallelism 是把每一层的权重切分到多张 GPU 上同时计算，因为矩阵乘法是可以分块的，把权重矩阵切块放在多个 GPU 上，当然有时需要做一次 All-Reduce 汇总一下结果；Pipeline Parallelism 是把不同层放到不同 GPU 上流水线处理，比较朴素的想法就是把前1/4部分的层放到第一张 GPU，以此类推可以放四个 GPU 。这样输入进来，经过 GPU1 ，GPU2 ，GPU3 ，GPU4 。通信频率较低，只需要传递激活值。分布式推理是实现超大模型推理的必要手段。
   </aside>
 </section>
 
@@ -1902,7 +1976,7 @@
     <br><br>
     第四，硬件加速：通过 Tensor Parallelism 和 Pipeline Parallelism 实现多 GPU 分布式推理。
     <br><br>
-    这些技术通常组合使用。比如 INT4 量化加上 Flash Attention 再加上 Speculative Decoding，可以获得累积的加速效果。
+    这些技术通常组合使用。从而获得累积的加速效果。
   </aside>
 </section>
 
